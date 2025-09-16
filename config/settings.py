@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,6 +39,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'apps.users',
+    'apps.listings',
+    'apps.wallet',
+    'apps.notifications',
 ]
 
 MIDDLEWARE = [
@@ -75,8 +79,15 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
+        'USER': config('DATABASE_USER', default='avnadmin'),
+        'PASSWORD': config('DATABASE_PASSWORD', default='localpass'),
+        'HOST': config('DATABASE_HOST', default='localhost'),
+        'PORT': config('DATABASE_PORT', default='5432'),
+        'OPTIONS': {
+            'sslmode': config('SSL_MODE', default='disable'),
+        } if config('SSL_MODE', default='disable') != 'disable' else {},
     }
 }
 
@@ -121,3 +132,6 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom User Model
+AUTH_USER_MODEL = 'users.User'
