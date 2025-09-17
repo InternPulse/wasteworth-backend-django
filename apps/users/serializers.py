@@ -14,7 +14,7 @@ class UserSignupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['email', 'password', 'confirm_password']
+        fields = ['email', 'password', 'confirm_password', 'role']
 
     def validate(self, data):
         if data['password'] != data['confirm_password']:
@@ -102,5 +102,5 @@ class UserLoginSerializer(serializers.Serializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'email', 'role', 'referral_code', 'created_at']
-        read_only_fields = ['id', 'referral_code', 'created_at']
+        fields = ['userId', 'name', 'email', 'phone', 'role', 'location', 'walletBalance', 'referralCode', 'createdAt']
+        read_only_fields = ['userId', 'referralCode', 'createdAt', 'walletBalance']
