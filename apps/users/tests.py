@@ -11,11 +11,12 @@ User = get_user_model()
 
 class UserSignupTestCase(APITestCase):
     def setUp(self):
-        self.signup_url = '/api/users/signup/'
+        self.signup_url = '/api/v1/users/signup/'
         self.valid_signup_data = {
             'email': 'test@example.com',
             'password': 'testpassword123',
-            'confirm_password': 'testpassword123'
+            'confirm_password': 'testpassword123',
+            'role': 'disposer'
         }
 
     def test_valid_signup(self):
@@ -76,7 +77,7 @@ class UserSignupTestCase(APITestCase):
 
 class UserLoginTestCase(APITestCase):
     def setUp(self):
-        self.login_url = '/api/users/login/'
+        self.login_url = '/api/v1/users/login/'
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpassword123'
@@ -127,7 +128,7 @@ class UserLoginTestCase(APITestCase):
 
 class UserLogoutTestCase(APITestCase):
     def setUp(self):
-        self.logout_url = '/api/users/logout/'
+        self.logout_url = '/api/v1/users/logout/'
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpassword123'

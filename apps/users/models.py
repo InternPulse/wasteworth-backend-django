@@ -38,18 +38,17 @@ class User(AbstractUser):
         ('admin', 'Admin'),
     ]
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255)
+    userId = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, null=True, blank=True)
     email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=20, unique=True)
+    phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='disposer')
-    location_lat = models.FloatField(null=True, blank=True)
-    location_lng = models.FloatField(null=True, blank=True)
-    address_location = models.CharField(max_length=255, null=True, blank=True)
-    referral_code = models.CharField(max_length=10, unique=True, blank=True)
-    referred_by = models.CharField(max_length=10, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    location = models.JSONField(null=True, blank=True)  # { "lat": float, "lng": float }
+    walletBalance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    referralCode = models.CharField(max_length=10, unique=True, blank=True)
+    referredBy = models.CharField(max_length=10, null=True, blank=True)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
 
     username = None
     first_name = None
@@ -58,11 +57,11 @@ class User(AbstractUser):
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['name']
+    REQUIRED_FIELDS = []
 
     def save(self, *args, **kwargs):
-        if not self.referral_code:
-            self.referral_code = self.generate_referral_code()
+        if not self.referralCode:
+            self.referralCode = self.generate_referral_code()
         super().save(*args, **kwargs)
 
     def generate_referral_code(self):
@@ -73,19 +72,19 @@ class User(AbstractUser):
 
 
 class OTP(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
-    hashed_otp = models.CharField(max_length=255)
-    expires_at = models.DateTimeField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    otpId = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    userId = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
+    hashedOtp = models.CharField(max_length=255)
+    expiresAt = models.DateTimeField()
+    createdAt = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        if not self.expires_at:
-            self.expires_at = timezone.now() + timezone.timedelta(minutes=10)
+        if not self.expiresAt:
+            self.expiresAt = timezone.now() + timezone.timedelta(minutes=10)
         super().save(*args, **kwargs)
 
     def is_expired(self):
-        return timezone.now() > self.expires_at
+        return timezone.now() > self.expiresAt
 
     def __str__(self):
-        return f"OTP for {self.user.name} - {'Expired' if self.is_expired() else 'Valid'}"
+        return f"OTP for {self.userId.name} - {'Expired' if self.is_expired() else 'Valid'}"
