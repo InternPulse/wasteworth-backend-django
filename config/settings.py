@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'apps.listings',
     'apps.wallet',
     'apps.notifications',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -110,6 +111,14 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+REST_FRAMEWORK = {
+    # Use Django's standard `django.contrib.auth` permissions,
+    # or allow read-only access for unauthenticated users.
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
+    ]
+}
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
@@ -135,3 +144,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom User Model
 AUTH_USER_MODEL = 'users.User'
+
+# ----------------------
+# Email Backend
+# ----------------------
+# For development/testing: prints emails to console
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'no-reply@wasteworth.com'
