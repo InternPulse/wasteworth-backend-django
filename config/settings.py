@@ -57,6 +57,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'utils.middleware.ExceptionMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -162,6 +163,7 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.JSONParser',
     ],
     'TEST_REQUEST_DEFAULT_FORMAT': 'json',
+    'EXCEPTION_HANDLER': 'utils.error_handler.custom_exception_handler',
 }
 
 # JWT Configuration
@@ -171,7 +173,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
-    'USER_ID_FIELD': 'userId',
+    'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
 }
 
