@@ -168,3 +168,46 @@ class UserLogoutTestCase(APITestCase):
         data = {'refresh_token': self.refresh_token}
         response = self.client.post(self.logout_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_with_valid_refresh_token(self):
+        """Test logout with valid refreshToken"""
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
+        data = {
+            'userId': str(self.user.id),
+            'refreshToken': self.refresh_token
+        }
+        response = self.client.post(self.logout_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['message'], 'Logout successful')
+
+    def test_logout_with_only_auth_token(self):
+        """Test logout with only authToken"""
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
+        data = {
+            'userId': str(self.user.id),
+            'authToken': self.access_token
+        }
+        response = self.client.post(self.logout_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['message'], 'Logout successful')
+        self.assertIn('note', response.data)
+
+    def test_logout_user_id_mismatch(self):
+        """Test logout with mismatched userId"""
+        other_user = User.objects.create_user(email='other@example.com', password='pass123')
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
+        data = {
+            'userId': str(other_user.id),
+            'refreshToken': self.refresh_token
+        }
+        response = self.client.post(self.logout_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('error', response.data)
+
+    def test_logout_no_tokens(self):
+        """Test logout without any tokens"""
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
+        data = {'userId': str(self.user.id)}
+        response = self.client.post(self.logout_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)

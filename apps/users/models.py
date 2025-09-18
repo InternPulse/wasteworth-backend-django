@@ -41,16 +41,19 @@ class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=20, unique=True)
+    phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='disposer')
+    is_verified = models.BooleanField(default=False, help_text='Whether the user has verified their account via OTP')
     location_lat = models.FloatField(null=True, blank=True)
     location_lng = models.FloatField(null=True, blank=True)
-    address_location = models.CharField(max_length=255, null=True, blank=True)
+    address_location = models.CharField(max_length=255, blank=True, null=True)  # Added field
+    wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     referral_code = models.CharField(max_length=10, unique=True, blank=True)
     referred_by = models.CharField(max_length=10, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Remove default username field
     username = None
     first_name = None
     last_name = None
@@ -73,9 +76,21 @@ class User(AbstractUser):
 
 
 class OTP(models.Model):
+    """
+    OTP model for handling one-time passwords for various purposes.
+    The 'id' field maps to 'otpId' in the API responses.
+    """
+    PURPOSE_CHOICES = [
+        ('signup', 'Signup'),
+        ('login', 'Login'),
+        ('reset', 'Password Reset'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
     hashed_otp = models.CharField(max_length=255)
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default='login')
+    used = models.BooleanField(default=False)  # Added field to match database
     expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -88,4 +103,4 @@ class OTP(models.Model):
         return timezone.now() > self.expires_at
 
     def __str__(self):
-        return f"OTP for {self.user.name} - {'Expired' if self.is_expired() else 'Valid'}"
+        return f"OTP ({self.purpose}) for {self.user.name} - {'Used' if self.used else 'Expired' if self.is_expired() else 'Valid'}"

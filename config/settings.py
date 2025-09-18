@@ -21,12 +21,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-uavw#m!wu%3d6*k9%y4$54pqh^5j_(6%_hqv1ibw4_3!a^d+mg'
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-fallback-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -43,7 +44,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'apps.users',
     'apps.listings',
-    'apps.wallet',
+    # 'apps.wallet',  # Temporarily disabled
     'apps.notifications',
 ]
 
@@ -82,19 +83,31 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 import sys
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
-        'USER': config('DATABASE_USER', default='avnadmin'),
-        'PASSWORD': config('DATABASE_PASSWORD', default='localpass'),
-        'HOST': config('DATABASE_HOST', default='localhost'),
-        'PORT': config('DATABASE_PORT', default='5432'),
-        'OPTIONS': {
-            'sslmode': config('SSL_MODE', default='disable'),
-        } if config('SSL_MODE', default='disable') != 'disable' else {},
+# Check if we should use PostgreSQL or SQLite
+USE_POSTGRES = config('USE_POSTGRES', default='False', cast=bool)
+
+if USE_POSTGRES:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
+            'USER': config('DATABASE_USER', default='avnadmin'),
+            'PASSWORD': config('DATABASE_PASSWORD', default='localpass'),
+            'HOST': config('DATABASE_HOST', default='localhost'),
+            'PORT': config('DATABASE_PORT', default='5432'),
+            'OPTIONS': {
+                'sslmode': config('SSL_MODE', default='disable'),
+            } if config('SSL_MODE', default='disable') != 'disable' else {},
+        }
     }
-}
+else:
+    # Use SQLite for local development
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Use SQLite for testing
 if 'test' in sys.argv:
@@ -163,3 +176,13 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
+
+# Email Configuration - Read from environment
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='emmfatsneh@gmail.com')
