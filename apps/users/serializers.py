@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.hashers import make_password
 from django.core.mail import send_mail
 from django.conf import settings
@@ -8,7 +10,11 @@ import string
 import re
 from .models import User, OTP
 
+User = get_user_model()
 
+# ------------------------------
+# User Registration & Authentication
+# ------------------------------
 class UserSignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     confirm_password = serializers.CharField(write_only=True)
@@ -51,7 +57,6 @@ class UserSignupSerializer(serializers.ModelSerializer):
             })
         return data
 
-
     def create(self, validated_data):
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
@@ -85,7 +90,91 @@ class UserLoginSerializer(serializers.Serializer):
         return data
 
 
+# ------------------------------
+# Password Management
+# ------------------------------
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
 
+
+class ResetPasswordSerializer(serializers.Serializer):
+    password = serializers.CharField(
+        write_only=True, required=True, validators=[validate_password]
+    )
+    password_confirm = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password_confirm"]:
+            raise serializers.ValidationError({"password": "Password fields didn't match."})
+        return attrs
+
+
+class UpdatePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(
+        write_only=True, required=True, validators=[validate_password]
+    )
+    new_password_confirm = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError({"new_password": "New passwords didn't match."})
+        return attrs
+
+    def validate_old_password(self, value):
+        user = self.context["request"].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Old password is incorrect.")
+        return value
+
+
+# ------------------------------
+# OTP Management (Commented out - uncomment when ready)
+# ------------------------------
+# class OTPRequestSerializer(serializers.Serializer):
+#     email = serializers.EmailField()
+
+#     def validate_email(self, value):
+#         try:
+#             user = User.objects.get(email=value)
+#             return value
+#         except User.DoesNotExist:
+#             raise serializers.ValidationError("No user found with this email")
+
+
+# class OTPVerifySerializer(serializers.Serializer):
+#     email = serializers.EmailField()
+#     otp = serializers.CharField(max_length=6)
+
+#     def validate(self, data):
+#         email = data.get('email')
+#         otp = data.get('otp')
+
+#         try:
+#             user = User.objects.get(email=email)
+#             otp_obj = OTP.objects.filter(user=user).order_by('-created_at').first()
+
+#             if not otp_obj:
+#                 raise serializers.ValidationError("No OTP found for this user")
+
+#             if otp_obj.is_expired():
+#                 raise serializers.ValidationError("OTP has expired")
+
+#             if not otp_obj.hashed_otp == make_password(otp, salt='otp_salt'):
+#                 raise serializers.ValidationError("Invalid OTP")
+
+#             data['user'] = user
+#             data['otp_obj'] = otp_obj
+
+#         except User.DoesNotExist:
+#             raise serializers.ValidationError("No user found with this email")
+
+#         return data
+
+
+# ------------------------------
+# User Profile Management
+# ------------------------------
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
