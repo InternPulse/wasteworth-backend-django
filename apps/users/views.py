@@ -9,6 +9,22 @@ from django.conf import settings
 from datetime import datetime, timedelta
 import jwt
 
+# Import error handler if it exists, otherwise create fallback
+try:
+    from utils.error_handler import ErrorCodes, ERROR_MESSAGES
+except ImportError:
+    # Fallback error handling if utils.error_handler doesn't exist
+    class ErrorCodes:
+        TOKEN_REQUIRED = "TOKEN_REQUIRED"
+        INVALID_TOKEN = "INVALID_TOKEN"
+        SERVER_ERROR = "SERVER_ERROR"
+    
+    ERROR_MESSAGES = {
+        ErrorCodes.TOKEN_REQUIRED: "Token is required",
+        ErrorCodes.INVALID_TOKEN: "Invalid token provided",
+        ErrorCodes.SERVER_ERROR: "Internal server error occurred"
+    }
+
 from .models import User
 from .serializers import (
     UserSignupSerializer,
@@ -31,6 +47,7 @@ def signup(request):
         user = serializer.save()
         refresh = RefreshToken.for_user(user)
         return Response({
+            'success': True,
             'message': 'User created successfully',
             'user': UserProfileSerializer(user).data,
             'tokens': {
@@ -48,6 +65,7 @@ def login(request):
         user = serializer.validated_data['user']
         refresh = RefreshToken.for_user(user)
         return Response({
+            'success': True,
             'message': 'Login successful',
             'user': UserProfileSerializer(user).data,
             'tokens': {
@@ -63,24 +81,41 @@ def login(request):
 def logout(request):
     try:
         refresh_token = request.data.get('refresh_token')
-        if refresh_token:
-            token = RefreshToken(refresh_token)
-            token.blacklist()
+        if not refresh_token:
             return Response({
-                'message': 'Logout successful'
-            }, status=status.HTTP_200_OK)
-        else:
-            return Response({
-                'error': 'Refresh token required'
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'success': False,
+                'error': {
+                    'code': ErrorCodes.TOKEN_REQUIRED,
+                    'message': ERROR_MESSAGES[ErrorCodes.TOKEN_REQUIRED],
+                    'details': {'refresh_token': ['Refresh token is required to log out securely.']}
+                }
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+        token = RefreshToken(refresh_token)
+        token.blacklist()
+        return Response({
+            'success': True,
+            'message': 'Logout successful'
+        }, status=status.HTTP_200_OK)
+
     except TokenError:
         return Response({
-            'error': 'Invalid token'
-        }, status=status.HTTP_400_BAD_REQUEST)
+            'success': False,
+            'error': {
+                'code': ErrorCodes.INVALID_TOKEN,
+                'message': ERROR_MESSAGES[ErrorCodes.INVALID_TOKEN],
+                'details': {'refresh_token': ['The provided refresh token is invalid or expired.']}
+            }
+        }, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({
-            'error': 'Logout failed'
-        }, status=status.HTTP_400_BAD_REQUEST)
+            'success': False,
+            'error': {
+                'code': ErrorCodes.SERVER_ERROR,
+                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
+                'details': {'error': ['An unexpected error occurred during logout.']}
+            }
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ------------------------------
