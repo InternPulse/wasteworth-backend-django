@@ -21,7 +21,7 @@ class UserSignupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['name', 'email', 'password', 'confirm_password', 'role']
+        fields = ['email', 'password', 'confirm_password', 'role']
 
     def validate_password(self, value):
         """Comprehensive password validation with detailed feedback"""
