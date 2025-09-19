@@ -144,7 +144,7 @@ class ForgotPasswordView(generics.GenericAPIView):
         # Generate JWT token with UNIX timestamp
         exp = datetime.utcnow() + timedelta(hours=1)
         token_payload = {
-            "user_id": user.id,
+            "user_id": str(user.id),  # Convert UUID to string
             "exp": exp.timestamp(),  # UNIX timestamp
         }
         token = jwt.encode(token_payload, settings.SECRET_KEY, algorithm="HS256")
