@@ -5,6 +5,7 @@ from django.utils import timezone
 import uuid
 import string
 import random
+import sys
 
 
 class UserManager(BaseUserManager):
@@ -32,6 +33,9 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractUser):
+
+    class Meta:
+        db_table = 'users'
     ROLE_CHOICES = [
         ('disposer', 'Disposer'),
         ('recycler', 'Recycler'),
@@ -75,6 +79,9 @@ class User(AbstractUser):
 
 
 class OTP(models.Model):
+
+    class Meta:
+        db_table = 'users_otp'
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
     hashed_otp = models.CharField(max_length=255)
