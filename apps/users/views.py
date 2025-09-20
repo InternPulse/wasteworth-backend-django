@@ -191,7 +191,7 @@ class ResetPasswordView(generics.GenericAPIView):
 # PATCH /api/v1/users/updatePassword
 class UpdatePasswordView(generics.GenericAPIView):
     serializer_class = UpdatePasswordSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = []
 
     def patch(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -202,3 +202,22 @@ class UpdatePasswordView(generics.GenericAPIView):
         user.save()
 
         return Response({"detail": "Password updated successfully."}, status=status.HTTP_200_OK)
+    
+
+class UserDashboardView(generics.GenericAPIView):
+    permission_classes = []
+
+    def get(self, request):
+        serializer = UserProfileSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UpdateUserView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        serializer = UserProfileSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
