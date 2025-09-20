@@ -179,4 +179,5 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'name', 'email', 'phone', 'role', 'location_lat', 'location_lng', 'address_location', 'wallet_balance', 'referral_code', 'created_at']
-        read_only_fields = ['id', 'referral_code', 'created_at', 'wallet_balance']
+        #read_only_fields = ['id', 'referral_code', 'created_at', 'wallet_balance']
+        read_only_fields = ['id', 'referral_code', 'created_at', 'wallet_balance', 'email', 'role']
