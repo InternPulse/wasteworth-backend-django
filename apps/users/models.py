@@ -48,9 +48,7 @@ class User(AbstractUser):
     phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
     is_verified = models.BooleanField(default=False)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='disposer')
-    location_lat = models.FloatField(blank=True, null=True)
-    location_lng = models.FloatField(blank=True, null=True)
-    address_location = models.CharField(max_length=255, blank=True, null=True)
+    address_location = models.JSONField(null=True, blank=True)
     wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     referral_code = models.CharField(max_length=10, unique=True, blank=True)
     referred_by = models.CharField(max_length=10, null=True, blank=True)
@@ -78,23 +76,4 @@ class User(AbstractUser):
         return f"{self.name} ({self.email})"
 
 
-class OTP(models.Model):
 
-    class Meta:
-        db_table = 'users_otp'
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
-    hashed_otp = models.CharField(max_length=255)
-    expires_at = models.DateTimeField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def save(self, *args, **kwargs):
-        if not self.expires_at:
-            self.expires_at = timezone.now() + timezone.timedelta(minutes=10)
-        super().save(*args, **kwargs)
-
-    def is_expired(self):
-        return timezone.now() > self.expires_at
-
-    def __str__(self):
-        return f"OTP for {self.user.name} - {'Expired' if self.is_expired() else 'Valid'}"

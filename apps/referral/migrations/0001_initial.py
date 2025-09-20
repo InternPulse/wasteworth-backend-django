@@ -13,16 +13,15 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Notification',
+            name='Referral',
             fields=[
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('type', models.CharField(choices=[('pickup', 'Pickup'), ('reward', 'Reward'), ('marketplace', 'Marketplace'), ('general', 'General')], max_length=20)),
-                ('message', models.TextField()),
-                ('is_read', models.BooleanField(default=False)),
+                ('bonus_amount', models.DecimalField(decimal_places=2, max_digits=10)),
+                ('status', models.CharField(choices=[('pending', 'Pending'), ('credited', 'Credited')], default='pending', max_length=20)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
             options={
-                'db_table': 'notifications',
+                'db_table': 'referrals',
             },
         ),
     ]

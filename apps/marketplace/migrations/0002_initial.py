@@ -10,14 +10,14 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('notifications', '0001_initial'),
+        ('marketplace', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='notification',
-            name='user_id',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='notifications', to=settings.AUTH_USER_MODEL),
+            model_name='marketplacelisting',
+            name='recycler_id',
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='marketplace_purchases', to=settings.AUTH_USER_MODEL),
         ),
     ]
