@@ -1,14 +1,15 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password,make_password
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 import random
 import string
 import re
-from .models import User, OTP
+from .models import User
+from apps.otp.models import OTP
 
 User = get_user_model()
 
@@ -128,49 +129,6 @@ class UpdatePasswordSerializer(serializers.Serializer):
         return value
 
 
-# ------------------------------
-# OTP Management (Commented out - uncomment when ready)
-# ------------------------------
-# class OTPRequestSerializer(serializers.Serializer):
-#     email = serializers.EmailField()
-
-#     def validate_email(self, value):
-#         try:
-#             user = User.objects.get(email=value)
-#             return value
-#         except User.DoesNotExist:
-#             raise serializers.ValidationError("No user found with this email")
-
-
-# class OTPVerifySerializer(serializers.Serializer):
-#     email = serializers.EmailField()
-#     otp = serializers.CharField(max_length=6)
-
-#     def validate(self, data):
-#         email = data.get('email')
-#         otp = data.get('otp')
-
-#         try:
-#             user = User.objects.get(email=email)
-#             otp_obj = OTP.objects.filter(user=user).order_by('-created_at').first()
-
-#             if not otp_obj:
-#                 raise serializers.ValidationError("No OTP found for this user")
-
-#             if otp_obj.is_expired():
-#                 raise serializers.ValidationError("OTP has expired")
-
-#             if not otp_obj.hashed_otp == make_password(otp, salt='otp_salt'):
-#                 raise serializers.ValidationError("Invalid OTP")
-
-#             data['user'] = user
-#             data['otp_obj'] = otp_obj
-
-#         except User.DoesNotExist:
-#             raise serializers.ValidationError("No user found with this email")
-
-#         return data
-
 
 # ------------------------------
 # User Profile Management
@@ -178,5 +136,5 @@ class UpdatePasswordSerializer(serializers.Serializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'name', 'email', 'phone', 'role', 'location_lat', 'location_lng', 'address_location', 'wallet_balance', 'referral_code', 'created_at']
+        fields = ['id', 'name', 'email', 'phone', 'role', 'address_location', 'wallet_balance', 'referral_code', 'created_at']
         read_only_fields = ['id', 'referral_code', 'created_at', 'wallet_balance']
