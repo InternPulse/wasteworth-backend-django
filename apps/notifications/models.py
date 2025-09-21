@@ -14,7 +14,7 @@ class Notification(models.Model):
         ('general', 'General'),
     ]
 
-    notification_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
     type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     message = models.TextField()
