@@ -1,2 +1,12 @@
-venv
+venv/
 .env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+db.sqlite3
+.DS_Store
+.claude/
+test_db.sqlite3
+nul
