@@ -47,6 +47,9 @@ INSTALLED_APPS = [
     'apps.listings',
     'apps.wallet',
     'apps.notifications',
+    'apps.otp',
+    'apps.marketplace',
+    'apps.referral',
 ]
 
 MIDDLEWARE = [

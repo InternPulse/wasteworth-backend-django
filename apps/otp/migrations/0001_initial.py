@@ -13,16 +13,17 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Notification',
+            name='OTP',
             fields=[
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('type', models.CharField(choices=[('pickup', 'Pickup'), ('reward', 'Reward'), ('marketplace', 'Marketplace'), ('general', 'General')], max_length=20)),
-                ('message', models.TextField()),
-                ('is_read', models.BooleanField(default=False)),
+                ('hashed_otp', models.CharField(max_length=255)),
+                ('purpose', models.CharField(choices=[('signup', 'Signup'), ('login', 'Login'), ('reset', 'Password Reset')], default='signup', max_length=20)),
+                ('used', models.BooleanField(default=False)),
+                ('expires_at', models.DateTimeField()),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
             options={
-                'db_table': 'notifications',
+                'db_table': 'users_otp',
             },
         ),
     ]
