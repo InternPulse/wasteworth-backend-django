@@ -45,17 +45,41 @@ def signup(request):
     serializer = UserSignupSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'success': True,
-            'message': 'User created successfully',
-            'user': UserProfileSerializer(user).data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }
-        }, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Set user as unverified by default
+        user.is_verified = False
+        user.save()
+
+        # Send OTP for verification
+        try:
+            from utils.otp import generate_and_send_otp
+            otp_instance = generate_and_send_otp(user, 'signup')
+
+            return Response({
+                'success': True,
+                'message': 'Account created successfully. Please verify your email with the OTP sent to complete registration.',
+                'user_id': str(user.id),
+                'email': user.email,
+                'is_verified': user.is_verified,
+                'otp_sent': True,
+                'next_step': 'Verify OTP using POST /api/v1/otp/verify/?action=signup to get access tokens'
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                'success': True,
+                'message': 'Account created successfully, but failed to send verification OTP.',
+                'user_id': str(user.id),
+                'email': user.email,
+                'is_verified': user.is_verified,
+                'otp_sent': False,
+                'error': 'Failed to send OTP. Use POST /api/v1/otp/send/ to request verification OTP.'
+            }, status=status.HTTP_201_CREATED)
+
+    return Response({
+        'success': False,
+        'errors': serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
@@ -69,7 +93,7 @@ def login(request):
             'message': 'Login successful',
             'user': UserProfileSerializer(user).data,
             'tokens': {
-                'refresh': str(refresh),
+                'refresh_token': str(refresh),
                 'access': str(refresh.access_token),
             }
         }, status=status.HTTP_200_OK)
@@ -136,56 +160,54 @@ class ForgotPasswordView(generics.GenericAPIView):
 
         # Always return generic message for security
         if not user:
-            return Response(
-                {"detail": "If the email exists, password reset instructions will be sent."},
-                status=status.HTTP_200_OK,
-            )
+            return Response({
+                "success": True,
+                "message": "If the email exists, password reset instructions will be sent."
+            }, status=status.HTTP_200_OK)
 
-        # Generate JWT token with UNIX timestamp
-        exp = datetime.utcnow() + timedelta(hours=1)
-        token_payload = {
-            "user_id": str(user.id),  # Convert UUID to string
-            "exp": exp.timestamp(),  # UNIX timestamp
-        }
-        token = jwt.encode(token_payload, settings.SECRET_KEY, algorithm="HS256")
-        if isinstance(token, bytes):
-            token = token.decode("utf-8")
+        # Send OTP for password reset
+        try:
+            from utils.otp import generate_and_send_otp
+            otp_instance = generate_and_send_otp(user, 'reset')
 
-        # Send token to frontend 
-        return Response(
-            {
-                "detail": "If the email exists, password reset instructions will be sent.",
-                "reset_token": token  # Frontend will build the reset link and send email
-            },
-            status=status.HTTP_200_OK,
-        )
+            return Response({
+                "success": True,
+                "message": "If the email exists, password reset instructions will be sent.",
+                "next_step": "Use POST /api/v1/otp/verify/?action=reset with email, otp, and new_password"
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "success": False,
+                "error": "Failed to send password reset instructions. Please try again."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # PATCH /api/v1/users/resetPassword/<str:resetToken>/
-class ResetPasswordView(generics.GenericAPIView):
-    serializer_class = ResetPasswordSerializer
-    permission_classes = []  # No auth needed
+# class ResetPasswordView(generics.GenericAPIView):
+#     serializer_class = ResetPasswordSerializer
+#     permission_classes = []  # No auth needed
 
-    def patch(self, request, resetToken, *args, **kwargs):
-        try:
-            payload = jwt.decode(resetToken, settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = payload.get("user_id")
-        except jwt.ExpiredSignatureError:
-            return Response({"detail": "Reset token has expired."}, status=status.HTTP_400_BAD_REQUEST)
-        except jwt.InvalidTokenError:
-            return Response({"detail": "Invalid reset token."}, status=status.HTTP_400_BAD_REQUEST)
+#     def patch(self, request, resetToken, *args, **kwargs):
+#         try:
+#             payload = jwt.decode(resetToken, settings.SECRET_KEY, algorithms=["HS256"])
+#             user_id = payload.get("user_id")
+#         except jwt.ExpiredSignatureError:
+#             return Response({"detail": "Reset token has expired."}, status=status.HTTP_400_BAD_REQUEST)
+#         except jwt.InvalidTokenError:
+#             return Response({"detail": "Invalid reset token."}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = User.objects.filter(id=user_id).first()
-        if not user:
-            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+#         user = User.objects.filter(id=user_id).first()
+#         if not user:
+#             return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+#         serializer = self.get_serializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
 
-        user.set_password(serializer.validated_data["password"])
-        user.save()
+#         user.set_password(serializer.validated_data["password"])
+#         user.save()
 
-        return Response({"detail": "Password has been reset successfully."}, status=status.HTTP_200_OK)
+#         return Response({"detail": "Password has been reset successfully."}, status=status.HTTP_200_OK)
 
 
 # PATCH /api/v1/users/updatePassword
@@ -194,11 +216,91 @@ class UpdatePasswordView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        # Check if OTP is provided in the request
+        otp_code = request.data.get('otp')
 
-        user = request.user
-        user.set_password(serializer.validated_data["new_password"])
-        user.save()
+        if not otp_code:
+            # Step 1: Send OTP first
+            old_password = request.data.get('old_password')
 
-        return Response({"detail": "Password updated successfully."}, status=status.HTTP_200_OK)
+            if not old_password:
+                return Response({
+                    'success': False,
+                    'error': 'old_password is required to send OTP'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+
+            # Verify current password
+            if not user.check_password(old_password):
+                return Response({
+                    'success': False,
+                    'error': 'Current password is incorrect'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Send OTP
+            try:
+                from utils.otp import generate_and_send_otp
+                otp_instance = generate_and_send_otp(user, 'reset')
+
+                return Response({
+                    'success': True,
+                    'message': 'OTP sent to your email. Please provide OTP and new_password to complete password update.',
+                    'otp_id': str(otp_instance.id)
+                }, status=status.HTTP_200_OK)
+            except Exception as e:
+                return Response({
+                    'success': False,
+                    'error': 'Failed to send OTP. Please try again.'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        else:
+            # Step 2: Verify OTP and update password
+            from apps.otp.serializers import OTPVerifySerializer
+
+            user = request.user
+            verify_data = {
+                'user_id': str(user.id),
+                'otp': otp_code
+            }
+
+            # Verify OTP
+            otp_serializer = OTPVerifySerializer(data=verify_data)
+            if not otp_serializer.is_valid():
+                return Response({
+                    'success': False,
+                    'errors': otp_serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            otp_user = otp_serializer.validated_data['user']
+            otp_obj = otp_serializer.validated_data['otp_obj']
+
+            # Ensure OTP is for password reset and belongs to authenticated user
+            if otp_obj.purpose != 'reset':
+                return Response({
+                    'success': False,
+                    'error': 'OTP is not for password reset'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            if otp_user.id != user.id:
+                return Response({
+                    'success': False,
+                    'error': 'OTP does not belong to authenticated user'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Validate new password using serializer
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            # Mark OTP as used
+            otp_obj.used = True
+            otp_obj.save()
+
+            # Update password
+            user.set_password(serializer.validated_data["new_password"])
+            user.save()
+
+            return Response({
+                'success': True,
+                'message': 'Password updated successfully'
+            }, status=status.HTTP_200_OK)
