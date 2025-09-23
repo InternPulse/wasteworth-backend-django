@@ -22,7 +22,7 @@ class UserSignupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['email', 'password', 'confirm_password', 'role']
+        fields = ['name','phone','email', 'password', 'confirm_password', 'role']
 
     def validate_password(self, value):
         """Comprehensive password validation with detailed feedback"""
@@ -138,3 +138,24 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'name', 'email', 'phone', 'role', 'address_location', 'wallet_balance', 'referral_code', 'created_at']
         read_only_fields = ['id', 'referral_code', 'created_at', 'wallet_balance']
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for profile updates that may require OTP verification for sensitive fields"""
+
+    class Meta:
+        model = User
+        fields = ['name', 'email', 'phone', 'role', 'address_location']
+
+    def validate_email(self, value):
+        """Validate email uniqueness when updating"""
+        user = self.instance
+        if user and user.email != value and User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return value
+
+    @staticmethod
+    def requires_otp(data):
+        """Check if the update contains sensitive fields that require OTP"""
+        sensitive_fields = {'email', 'phone', 'role'}
+        return bool(sensitive_fields.intersection(data.keys()))
