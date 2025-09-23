@@ -8,7 +8,7 @@ http://localhost:8000/api/v1/
 
 **Production:**
 ```
-https://your-domain.com/api/v1/
+https://wasteworth-backend-django.onrender.com/api/v1/
 ```
 
 ## Authentication
@@ -16,6 +16,32 @@ The API uses JWT (JSON Web Token) authentication. Include the access token in th
 ```
 Authorization: Bearer <access_token>
 ```
+
+## 🔄 Consistent Error Format
+**ALL endpoints now return errors in this standardized format:**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "User-friendly error message",
+    "details": {
+      "field": ["Specific field error"]
+    }
+  }
+}
+```
+
+**Common Error Codes:**
+- `VALIDATION_ERROR` - Invalid input data
+- `EMAIL_ALREADY_EXISTS` - Duplicate email during signup
+- `INVALID_CREDENTIALS` - Wrong login credentials
+- `TOKEN_REQUIRED` - Missing authentication token
+- `INVALID_TOKEN` - Invalid/expired token
+- `OTP_REQUIRED` - OTP verification needed
+- `INVALID_OTP` - Wrong/expired OTP
+- `PERMISSION_DENIED` - Insufficient permissions
 
 ## Quick Start Guide
 
@@ -40,6 +66,15 @@ POST /users/forgotPassword/
 POST /otp/verify/?action=reset
 ```
 
+### 3. Update Profile (Sensitive Fields)
+```bash
+# Step 1: Request OTP for email/phone/role changes
+PATCH /users/update-user/ (with sensitive field)
+
+# Step 2: Verify OTP and complete update
+PATCH /users/update-user/ (with same data + OTP)
+```
+
 ---
 
 ## 📋 All Endpoints
@@ -54,21 +89,23 @@ Creates a new **unverified** user account and sends OTP to email.
 **Request Body:**
 ```json
 {
+    "name": "John Doe",
     "email": "user@example.com",
     "password": "StrongPass123!",
     "confirm_password": "StrongPass123!",
+    "phone": "+1234567890",
     "role": "disposer"
 }
 ```
 
-**Valid Roles:** `disposer`, `recycler`, `admin`
+**Valid Roles:** `disposer`, `recycler`
 
 **Success Response (201):**
 ```json
 {
     "success": true,
     "message": "Account created successfully. Please verify your email with the OTP sent to complete registration.",
-    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
     "email": "user@example.com",
     "is_verified": false,
     "otp_sent": true,
@@ -80,10 +117,34 @@ Creates a new **unverified** user account and sends OTP to email.
 ```json
 {
     "success": false,
-    "errors": {
-        "email": ["An account with this email already exists. Try logging in instead."],
-        "password": ["Password must contain at least one uppercase letter"],
-        "confirm_password": ["Passwords do not match. Please ensure both password fields are identical."]
+    "error": {
+        "code": "EMAIL_ALREADY_EXISTS",
+        "message": "An account with this email already exists. Try logging in instead.",
+        "details": {
+            "email": ["user with this email already exists."]
+        }
+    }
+}
+```
+
+**Validation Error Response (400):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The provided data is invalid. Please check the details below.",
+        "details": {
+            "name": ["This field may not be blank."],
+            "email": ["Enter a valid email address."],
+            "password": [
+                "Password must be at least 8 characters long",
+                "Password must contain at least one uppercase letter",
+                "Password must contain at least one number",
+                "Password must contain at least one special character"
+            ],
+            "role": ["\"invalid\" is not a valid choice."]
+        }
     }
 }
 ```
@@ -107,10 +168,10 @@ Verifies OTP and completes user registration. Returns access tokens.
     "success": true,
     "message": "Account verification successful",
     "user": {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "name": "",
+        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
+        "name": "John Doe",
         "email": "user@example.com",
-        "phone": null,
+        "phone": "+1234567890",
         "role": "disposer",
         "address_location": null,
         "wallet_balance": "0.00",
@@ -143,10 +204,10 @@ Direct login - **no OTP required**.
     "success": true,
     "message": "Login successful",
     "user": {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "name": "",
+        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
+        "name": "John Doe",
         "email": "user@example.com",
-        "phone": null,
+        "phone": "+1234567890",
         "role": "disposer",
         "address_location": null,
         "wallet_balance": "0.00",
@@ -163,13 +224,19 @@ Direct login - **no OTP required**.
 **Error Response (400):**
 ```json
 {
-    "non_field_errors": ["No account found with this email address. Please check your email or sign up."]
+    "success": false,
+    "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The provided data is invalid. Please check the details below.",
+        "details": {
+            "non_field_errors": ["The password you entered is incorrect. Please try again."]
+        }
+    }
 }
 ```
 
 #### 4. User Logout
 **POST** `/users/logout/`
-**Authentication Required:** Yes
 
 Blacklists the refresh token to logout the user securely.
 
@@ -188,11 +255,153 @@ Blacklists the refresh token to logout the user securely.
 }
 ```
 
+**Error Response (401):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "TOKEN_REQUIRED",
+        "message": "Authentication token is required for this action.",
+        "details": {
+            "refresh_token": ["Refresh token is required to log out securely."]
+        }
+    }
+}
+```
+
+---
+
+### 👤 User Profile Management
+
+#### 5. User Dashboard
+**GET** `/users/user-dashboard/`
+**Authentication Required:** Yes
+
+Gets authenticated user's profile information.
+
+**Success Response (200):**
+```json
+{
+    "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
+    "name": "John Doe",
+    "email": "user@example.com",
+    "phone": "+1234567890",
+    "role": "disposer",
+    "address_location": {
+        "lat": 40.7128,
+        "lng": -74.0060
+    },
+    "wallet_balance": "150.00",
+    "referral_code": "ABC123DEF",
+    "created_at": "2025-01-15T10:30:00Z"
+}
+```
+
+**Error Response (401):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The provided data is invalid. Please check the details below.",
+        "details": {
+            "detail": ["Authentication credentials were not provided."]
+        }
+    }
+}
+```
+
+#### 6. Update User Profile (Two-Step Process)
+**PATCH** `/users/update-user/`
+**Authentication Required:** Yes
+
+Updates user profile. **Sensitive fields** (email, phone, role) require OTP verification.
+
+**Sensitive Fields:** `email`, `phone`, `role`
+**Non-Sensitive Fields:** `name`, `address_location`
+
+**Step 1 - Update Non-Sensitive Fields (Direct):**
+```json
+{
+    "name": "Updated Name",
+    "address_location": {
+        "lat": 40.7128,
+        "lng": -74.0060
+    }
+}
+```
+
+**Step 1 Response (200):**
+```json
+{
+    "success": true,
+    "message": "Profile updated successfully",
+    "data": {
+        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
+        "name": "Updated Name",
+        "email": "user@example.com",
+        "phone": "+1234567890",
+        "role": "disposer",
+        "address_location": {
+            "lat": 40.7128,
+            "lng": -74.0060
+        },
+        "wallet_balance": "150.00",
+        "referral_code": "ABC123DEF",
+        "created_at": "2025-01-15T10:30:00Z"
+    }
+}
+```
+
+**Step 1 - Update Sensitive Fields (Sends OTP):**
+```json
+{
+    "email": "newemail@example.com"
+}
+```
+
+**Step 1 Response (200):**
+```json
+{
+    "success": true,
+    "message": "Profile update requires verification. OTP sent to your email.",
+    "otp_id": "abc-123-def-456",
+    "next_step": "Provide the same data along with the OTP to complete the update"
+}
+```
+
+**Step 2 - Verify OTP + Complete Update:**
+```json
+{
+    "email": "newemail@example.com",
+    "otp": "123456"
+}
+```
+
+**Step 2 Response (200):**
+```json
+{
+    "success": true,
+    "message": "Profile updated successfully",
+    "data": {
+        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
+        "name": "John Doe",
+        "email": "newemail@example.com",
+        "phone": "+1234567890",
+        "role": "disposer",
+        "address_location": null,
+        "wallet_balance": "150.00",
+        "referral_code": "ABC123DEF",
+        "created_at": "2025-01-15T10:30:00Z"
+    }
+}
+```
+
 ---
 
 ### 🔑 Password Management
 
-#### 5. Forgot Password (Request Reset)
+#### 7. Forgot Password (Request Reset)
 **POST** `/users/forgotPassword/`
 
 Sends OTP to email for password reset.
@@ -213,7 +422,7 @@ Sends OTP to email for password reset.
 }
 ```
 
-#### 6. Reset Password (Verify OTP + Set New Password)
+#### 8. Reset Password (Verify OTP + Set New Password)
 **POST** `/otp/verify/?action=reset`
 
 Verifies OTP and resets password in one step.
@@ -233,20 +442,20 @@ Verifies OTP and resets password in one step.
     "success": true,
     "message": "Password reset successful",
     "user": {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "name": "",
+        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
+        "name": "John Doe",
         "email": "user@example.com",
-        "phone": null,
+        "phone": "+1234567890",
         "role": "disposer",
         "address_location": null,
-        "wallet_balance": "0.00",
+        "wallet_balance": "150.00",
         "referral_code": "ABC123DEF",
         "created_at": "2025-01-15T10:30:00Z"
     }
 }
 ```
 
-#### 7. Update Password (Two-Step Process)
+#### 9. Update Password (Two-Step Process)
 **PATCH** `/users/updatePassword/`
 **Authentication Required:** Yes
 
@@ -288,7 +497,7 @@ Verifies OTP and resets password in one step.
 
 ### 📱 OTP Management
 
-#### 8. Send OTP
+#### 10. Send OTP
 **POST** `/otp/send/`
 
 Manually send OTP for any purpose.
@@ -301,7 +510,7 @@ Manually send OTP for any purpose.
 }
 ```
 
-**Valid Purposes:** `signup`, `reset`, `login`
+**Valid Purposes:** `signup`, `reset`, `profile_update`
 
 **Success Response (200):**
 ```json
@@ -313,7 +522,7 @@ Manually send OTP for any purpose.
 }
 ```
 
-#### 9. Resend OTP
+#### 11. Resend OTP
 **POST** `/otp/resend/`
 
 Resends OTP and invalidates previous ones.
@@ -335,26 +544,6 @@ Resends OTP and invalidates previous ones.
 }
 ```
 
-#### 10. Request Password Reset (Alternative)
-**POST** `/otp/request-password-reset/`
-
-Alternative endpoint for password reset.
-
-**Request Body:**
-```json
-{
-    "email_or_phone": "user@example.com"
-}
-```
-
-**Success Response (200):**
-```json
-{
-    "success": true,
-    "message": "OTP for password reset sent"
-}
-```
-
 ---
 
 ## 🔒 Security Features
@@ -363,7 +552,7 @@ Alternative endpoint for password reset.
 - **6-digit numeric codes**
 - **10-minute expiration**
 - **Single-use only** (cannot be reused)
-- **Purpose validation** (signup OTP ≠ reset OTP)
+- **Purpose validation** (signup OTP ≠ reset OTP ≠ profile_update OTP)
 - **Previous OTP invalidation** on resend
 - **Secure hashing** in database storage
 
@@ -378,6 +567,7 @@ Alternative endpoint for password reset.
 - **New users start unverified** until OTP verification
 - **Login does not require OTP** (direct access)
 - **Password operations require OTP** for security
+- **Profile updates require OTP** for sensitive fields (email, phone, role)
 - **Defense in depth** for password updates (auth + old password + OTP)
 
 ---
@@ -406,91 +596,26 @@ To refresh an expired access token:
 
 ---
 
-## ⚠️ Error Responses
-
-### Common Error Formats
-
-**Validation Errors (400):**
-```json
-{
-    "success": false,
-    "errors": {
-        "email": ["This field is required."],
-        "password": ["Password must be at least 8 characters long"]
-    }
-}
-```
-
-**Authentication Errors (401):**
-```json
-{
-    "success": false,
-    "error": {
-        "code": "TOKEN_REQUIRED",
-        "message": "Token is required",
-        "details": {
-            "refresh_token": ["Refresh token is required to log out securely."]
-        }
-    }
-}
-```
-
-**OTP Errors (400):**
-```json
-{
-    "success": false,
-    "errors": {
-        "otp": ["Invalid OTP"]
-    }
-}
-```
-
-**Server Errors (500):**
-```json
-{
-    "success": false,
-    "error": "Failed to send password reset instructions. Please try again."
-}
-```
-
----
-
-## 🧪 Testing
-
-Use the provided test runner:
-```bash
-python run_auth_tests.py
-```
-
-Or test individual endpoints:
-```bash
-# Test OTP functionality
-python manage.py test apps.otp -v 2
-
-# Test authentication flows
-python manage.py test apps.users.test_otp_integration -v 2
-```
-
----
-
 ## 📱 Usage Examples
 
 ### Complete Signup Flow
 ```javascript
 // 1. Sign up
-const signupResponse = await fetch('/api/v1/users/signup/', {
+const signupResponse = await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/signup/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+        name: 'John Doe',
         email: 'user@example.com',
         password: 'StrongPass123!',
         confirm_password: 'StrongPass123!',
+        phone: '+1234567890',
         role: 'disposer'
     })
 });
 
 // 2. Verify OTP (user enters OTP from email)
-const verifyResponse = await fetch('/api/v1/otp/verify/?action=signup', {
+const verifyResponse = await fetch('https://wasteworth-backend-django.onrender.com/api/v1/otp/verify/?action=signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -506,7 +631,7 @@ const { tokens } = await verifyResponse.json();
 ### Password Reset Flow
 ```javascript
 // 1. Request reset
-await fetch('/api/v1/users/forgotPassword/', {
+await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/forgotPassword/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -515,7 +640,7 @@ await fetch('/api/v1/users/forgotPassword/', {
 });
 
 // 2. Reset with OTP
-await fetch('/api/v1/otp/verify/?action=reset', {
+await fetch('https://wasteworth-backend-django.onrender.com/api/v1/otp/verify/?action=reset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -526,17 +651,55 @@ await fetch('/api/v1/otp/verify/?action=reset', {
 });
 ```
 
-### Authenticated Request
+### Profile Update Flow
 ```javascript
-const response = await fetch('/api/v1/users/updatePassword/', {
+// 1. Update non-sensitive field (direct)
+await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-user/', {
     method: 'PATCH',
     headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`
     },
     body: JSON.stringify({
-        old_password: 'CurrentPassword123!'
+        name: 'Updated Name'
     })
+});
+
+// 2. Update sensitive field (requires OTP)
+// Step 1: Request OTP
+await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-user/', {
+    method: 'PATCH',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({
+        email: 'newemail@example.com'
+    })
+});
+
+// Step 2: Verify OTP and complete update
+await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-user/', {
+    method: 'PATCH',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({
+        email: 'newemail@example.com',
+        otp: '123456'
+    })
+});
+```
+
+### Authenticated Request
+```javascript
+const response = await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/user-dashboard/', {
+    method: 'GET',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+    }
 });
 ```
 
@@ -556,4 +719,31 @@ const response = await fetch('/api/v1/users/updatePassword/', {
 
 ---
 
-**🎉 Your OTP-based authentication system is ready for production use!**
+## 🧪 Testing
+
+Test the API endpoints:
+```bash
+# Test signup with validation errors
+curl -X POST https://wasteworth-backend-django.onrender.com/api/v1/users/signup/ \
+  -H "Content-Type: application/json" \
+  -d '{"name": "", "email": "invalid-email", "password": "weak", "role": "invalid"}'
+
+# Test login with wrong password
+curl -X POST https://wasteworth-backend-django.onrender.com/api/v1/users/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "password": "wrongpassword"}'
+
+# Test dashboard without authentication
+curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/users/user-dashboard/
+```
+
+---
+
+**🎉 Your OTP-based authentication system with consistent error handling is ready for production use!**
+
+**Key Features:**
+✅ Consistent error response format across all endpoints
+✅ OTP integration for sensitive operations
+✅ Two-step profile updates for security
+✅ Comprehensive validation with detailed error messages
+✅ Production-ready with proper authentication
