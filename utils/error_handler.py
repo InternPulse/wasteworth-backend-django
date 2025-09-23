@@ -21,6 +21,17 @@ class ErrorCodes:
     INVALID_EMAIL = "INVALID_EMAIL"
     WEAK_PASSWORD = "WEAK_PASSWORD"
 
+    # OTP-related errors
+    OTP_REQUIRED = "OTP_REQUIRED"
+    INVALID_OTP = "INVALID_OTP"
+    OTP_EXPIRED = "OTP_EXPIRED"
+    OTP_WRONG_PURPOSE = "OTP_WRONG_PURPOSE"
+    OTP_SEND_FAILED = "OTP_SEND_FAILED"
+
+    # Profile update errors
+    PROFILE_UPDATE_FAILED = "PROFILE_UPDATE_FAILED"
+    EMAIL_UPDATE_REQUIRES_OTP = "EMAIL_UPDATE_REQUIRES_OTP"
+
     # General errors
     NOT_FOUND = "NOT_FOUND"
     SERVER_ERROR = "SERVER_ERROR"
@@ -37,6 +48,13 @@ ERROR_MESSAGES = {
     ErrorCodes.REQUIRED_FIELD: "This field is required.",
     ErrorCodes.INVALID_EMAIL: "Please enter a valid email address.",
     ErrorCodes.WEAK_PASSWORD: "Password does not meet security requirements.",
+    ErrorCodes.OTP_REQUIRED: "This action requires OTP verification. Please provide a valid OTP.",
+    ErrorCodes.INVALID_OTP: "The OTP you entered is invalid or has already been used.",
+    ErrorCodes.OTP_EXPIRED: "The OTP has expired. Please request a new one.",
+    ErrorCodes.OTP_WRONG_PURPOSE: "The OTP is not valid for this type of operation.",
+    ErrorCodes.OTP_SEND_FAILED: "Failed to send OTP. Please try again later.",
+    ErrorCodes.PROFILE_UPDATE_FAILED: "Failed to update profile. Please check your data and try again.",
+    ErrorCodes.EMAIL_UPDATE_REQUIRES_OTP: "Changing your email address requires OTP verification for security.",
     ErrorCodes.NOT_FOUND: "The requested resource was not found.",
     ErrorCodes.SERVER_ERROR: "Something went wrong on our end. Please try again later.",
     ErrorCodes.PERMISSION_DENIED: "You don't have permission to perform this action.",
@@ -65,6 +83,22 @@ def get_error_code_from_message(message):
         return ErrorCodes.INVALID_TOKEN
     elif "refresh token required" in message_lower:
         return ErrorCodes.TOKEN_REQUIRED
+    # New OTP-related error mappings
+    elif "otp is not for profile update" in message_lower or "otp wrong purpose" in message_lower:
+        return ErrorCodes.OTP_WRONG_PURPOSE
+    elif "otp does not belong" in message_lower or "invalid otp" in message_lower:
+        return ErrorCodes.INVALID_OTP
+    elif "otp expired" in message_lower:
+        return ErrorCodes.OTP_EXPIRED
+    elif "failed to send otp" in message_lower:
+        return ErrorCodes.OTP_SEND_FAILED
+    elif "otp required" in message_lower or "provide otp" in message_lower:
+        return ErrorCodes.OTP_REQUIRED
+    # Profile update specific errors
+    elif "profile update" in message_lower and "failed" in message_lower:
+        return ErrorCodes.PROFILE_UPDATE_FAILED
+    elif "email address requires otp" in message_lower:
+        return ErrorCodes.EMAIL_UPDATE_REQUIRES_OTP
     else:
         return ErrorCodes.VALIDATION_ERROR
 
