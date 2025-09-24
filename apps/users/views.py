@@ -9,6 +9,9 @@ from django.contrib.auth import authenticate, get_user_model
 from django.conf import settings
 from datetime import datetime, timedelta
 import jwt
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import error handler if it exists, otherwise create fallback
 try:
@@ -71,6 +74,7 @@ def signup(request):
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
+        logger.error(f"OTP sending failed for user {user.email}: {str(e)}")
         return Response({
             'success': True,
             'message': 'Account created successfully, but failed to send verification OTP.',
@@ -133,6 +137,7 @@ def logout(request):
             }
         }, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
+        logger.error(f"Token refresh failed: {str(e)}")
         return Response({
             'success': False,
             'error': {
@@ -178,6 +183,7 @@ class ForgotPasswordView(generics.GenericAPIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.error(f"Password reset OTP sending failed for user {user.email}: {str(e)}")
             return Response({
                 "success": False,
                 "error": "Failed to send password reset instructions. Please try again."
@@ -217,6 +223,7 @@ class UpdatePasswordView(generics.GenericAPIView):
                     'otp_id': str(otp_instance.id)
                 }, status=status.HTTP_200_OK)
             except Exception as e:
+                logger.error(f"Password update OTP sending failed for user {user.email}: {str(e)}")
                 raise ValidationError('Failed to send OTP. Please try again.')
 
         else:
@@ -301,6 +308,7 @@ class UpdateUserView(generics.GenericAPIView):
                         'next_step': 'Provide the same data along with the OTP to complete the update'
                     }, status=status.HTTP_200_OK)
                 except Exception as e:
+                    logger.error(f"Profile update OTP sending failed for user {user.email}: {str(e)}")
                     return Response({
                         'success': False,
                         'error': 'Failed to send OTP. Please try again.'
