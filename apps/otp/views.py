@@ -9,6 +9,9 @@ from .models import OTP
 from .serializers import OTPVerifySerializer
 from apps.users.serializers import UserProfileSerializer
 from utils.otp import generate_and_send_otp
+import logging
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -42,6 +45,7 @@ def send_otp(request):
             'error': 'User not found'
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        logger.error(f"OTP sending failed for user {email_or_phone}: {str(e)}")
         return Response({
             'success': False,
             'error': 'Failed to send OTP. Please try again.'
@@ -163,6 +167,7 @@ def resend_otp(request):
             'error': 'User not found'
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        logger.error(f"OTP resend failed for user {email_or_phone}: {str(e)}")
         return Response({
             'success': False,
             'error': 'Failed to send OTP. Please try again.'
@@ -196,6 +201,7 @@ def request_password_reset(request):
                 'message': 'OTP for password reset sent'
             }, status=status.HTTP_200_OK)
         except Exception as e:
+            logger.error(f"Password reset OTP sending failed for user {email_or_phone}: {str(e)}")
             return Response({
                 'success': False,
                 'error': 'Failed to send OTP. Please try again.'
