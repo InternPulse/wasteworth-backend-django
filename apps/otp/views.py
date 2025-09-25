@@ -30,13 +30,13 @@ def send_otp(request):
             user = User.objects.get(phone=email_or_phone)
 
         # Generate and send OTP
-        otp_instance = generate_and_send_otp(user, purpose)
+        otp_result = generate_and_send_otp(user, purpose)
 
         return Response({
             'success': True,
             'message': 'OTP sent successfully',
-            'otp_id': str(otp_instance.id),
-            'expires_at': otp_instance.expires_at
+            'otp_id': str(otp_result['otp_instance'].id),
+            'expires_at': otp_result['otp_instance'].expires_at
         }, status=status.HTTP_200_OK)
 
     except User.DoesNotExist:
@@ -153,12 +153,12 @@ def resend_otp(request):
         OTP.objects.filter(user_id=user, used=False).update(used=True)
 
         # Generate new OTP
-        otp_instance = generate_and_send_otp(user, purpose)
+        otp_result = generate_and_send_otp(user, purpose)
 
         return Response({
             'success': True,
             'message': 'New OTP sent successfully',
-            'otp_id': str(otp_instance.id)
+            'otp_id': str(otp_result['otp_instance'].id)
         }, status=status.HTTP_200_OK)
 
     except User.DoesNotExist:

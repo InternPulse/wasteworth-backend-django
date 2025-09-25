@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
+    'django_rq',
     'apps.users',
     'apps.listings',
     'apps.wallet',
@@ -204,6 +205,31 @@ else:
 
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@wasteworth.com')
 
+# Django-RQ Configuration
+RQ_QUEUES = {
+    'default': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': config('REDIS_DB', default=0, cast=int),
+        'PASSWORD': config('REDIS_PASSWORD', default=None),
+        'DEFAULT_TIMEOUT': 360,
+    },
+    'high': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': config('REDIS_DB', default=0, cast=int),
+        'PASSWORD': config('REDIS_PASSWORD', default=None),
+        'DEFAULT_TIMEOUT': 500,
+    },
+    'low': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': config('REDIS_DB', default=0, cast=int),
+        'PASSWORD': config('REDIS_PASSWORD', default=None),
+        'DEFAULT_TIMEOUT': 500,
+    }
+}
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -232,7 +258,7 @@ AUTH_USER_MODEL = 'users.User'
 # Security Settings for Production
 if not DEBUG and 'test' not in sys.argv:
     # HTTPS settings
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = not DEBUG  # Disable SSL redirect in development
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
     # HSTS settings

@@ -3,6 +3,7 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from datetime import datetime, timedelta
@@ -24,9 +25,10 @@ class UserSignupTestCase(APITestCase):
             'role': 'disposer'
         }
 
-    @patch('utils.otp.send_mail')
-    def test_valid_signup(self, mock_send_mail):
-        mock_send_mail.return_value = True
+    @patch('utils.tasks.queue_otp_email')
+    def test_valid_signup(self, mock_queue):
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         response = self.client.post(self.signup_url, self.valid_signup_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -327,16 +329,54 @@ class ErrorHandlingTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
         # Check password validation provides specific feedback
-        password_errors = response.data.get('password', [])
+        password_errors = response.data['error']['details'].get('password', [])
         self.assertIsInstance(password_errors, list)
         self.assertGreater(len(password_errors), 1)  # Multiple specific errors
 
         # Check for specific requirements
-        all_errors = ' '.join(password_errors)
+        all_errors = ' '.join(str(error) for error in password_errors)
         self.assertIn('8 characters', all_errors)
         self.assertIn('uppercase', all_errors)
         self.assertIn('number', all_errors)
         self.assertIn('special character', all_errors)
+
+    def test_frontend_friendly_message_field(self):
+        """Test that the new top-level message field provides user-friendly errors"""
+        # Test login error
+        login_data = {
+            'email': 'nonexistent@example.com',
+            'password': 'wrongpass'
+        }
+        response = self.client.post(self.login_url, login_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Check that top-level message exists and is user-friendly
+        self.assertIn('message', response.data)
+        self.assertIsInstance(response.data['message'], str)
+        self.assertTrue(len(response.data['message']) > 0)
+
+        # Should contain user-friendly message, not generic technical message
+        message = response.data['message'].lower()
+        self.assertTrue(
+            'no account found' in message or
+            'incorrect' in message or
+            'invalid' in message
+        )
+
+        # Test missing field error
+        signup_data = {
+            'email': 'test@example.com',
+            'password': 'ValidPass123!',
+            'confirm_password': 'ValidPass123!',
+            'role': 'disposer'
+            # Missing 'name' field
+        }
+        response = self.client.post(self.signup_url, signup_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Check top-level message for missing field
+        self.assertIn('message', response.data)
+        self.assertEqual(response.data['message'], 'This field is required.')
 
     def test_email_validation_helpful_message(self):
         """Test enhanced email validation message"""
@@ -398,10 +438,11 @@ class ForgotPasswordTestCase(APITestCase):
             password='StrongPass123#'
         )
 
-    @patch('utils.otp.send_mail')
-    def test_forgot_password_valid_email(self, mock_send_mail):
+    @patch('utils.tasks.queue_otp_email')
+    def test_forgot_password_valid_email(self, mock_queue):
         """Test forgot password with valid email - now sends OTP"""
-        mock_send_mail.return_value = True
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         data = {'email': 'test@example.com'}
         response = self.client.post(self.forgot_password_url, data, format='json')
@@ -452,42 +493,66 @@ class ForgotPasswordTestCase(APITestCase):
         self.assertIn('email', response.data['error']['details'])
 
 
-class ResetPasswordTestCase(APITestCase):
+class OTPPasswordResetTestCase(APITestCase):
+    """Tests for OTP-based password reset flow matching the actual implementation"""
     def setUp(self):
         self.user = User.objects.create_user(
-            name='Test User',
-            email='test@example.com',
-            password='OldPass123#'
+            name='Reset Test User',
+            email='reset@example.com',
+            password='OldPassword123!'
         )
-        # Generate valid reset token
-        exp = datetime.utcnow() + timedelta(hours=1)
-        self.valid_token_payload = {
-            "user_id": str(self.user.id),  # Convert UUID to string
-            "exp": exp.timestamp(),
+        self.forgot_password_url = '/api/v1/users/forgotPassword/'
+        self.update_password_url = '/api/v1/users/updatePassword/'
+        self.otp_verify_url = '/api/v1/otp/verify/'
+
+    @patch('utils.tasks.queue_otp_email')
+    def test_complete_otp_password_reset_flow(self, mock_queue):
+        """Test complete OTP-based password reset flow"""
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
+
+        # Step 1: Request password reset (sends OTP)
+        forgot_data = {'email': 'reset@example.com'}
+        forgot_response = self.client.post(self.forgot_password_url, forgot_data, format='json')
+
+        self.assertEqual(forgot_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(forgot_response.data['success'])
+        self.assertIn('If the email exists', forgot_response.data['message'])
+
+        # Step 2: Create known OTP for verification
+        from apps.otp.models import OTP
+        from django.contrib.auth.hashers import make_password
+
+        otp_code = '123456'
+        otp_instance = OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password(otp_code),
+            purpose='reset',
+            used=False
+        )
+
+        # Step 3: Authenticate user and reset password using updatePassword endpoint with OTP
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(self.user)
+        access_token = str(refresh.access_token)
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + access_token)
+
+        update_data = {
+            'old_password': 'OldPassword123!',  # Current password
+            'new_password': 'NewPassword123!',
+            'new_password_confirm': 'NewPassword123!',
+            'otp': otp_code
         }
-        self.valid_token = jwt.encode(self.valid_token_payload, settings.SECRET_KEY, algorithm="HS256")
-        if isinstance(self.valid_token, bytes):
-            self.valid_token = self.valid_token.decode("utf-8")
 
-        self.reset_password_url = f'/api/v1/users/resetPassword/{self.valid_token}/'
+        update_response = self.client.patch(self.update_password_url, update_data, format='json')
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(update_response.data['success'])
 
-    def test_reset_password_valid_token(self):
-        """Test reset password with valid token and password"""
-        data = {
-            'password': 'NewStrongPass123#',
-            'password_confirm': 'NewStrongPass123#'
-        }
-        response = self.client.patch(self.reset_password_url, data, format='json')
-        if response.status_code != status.HTTP_200_OK:
-            print(f"Response status: {response.status_code}")
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['detail'], 'Password has been reset successfully.')
-
-        # Verify password was actually changed
+        # Step 4: Verify password was changed
         self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password('NewStrongPass123#'))
+        self.assertTrue(self.user.check_password('NewPassword123!'))
 
-    def test_reset_password_expired_token(self):
+    # def test_reset_password_expired_token(self):
         """Test reset password with expired token"""
         # Generate expired token
         exp = datetime.utcnow() - timedelta(hours=1)  # 1 hour ago
@@ -584,10 +649,11 @@ class UpdatePasswordTestCase(APITestCase):
         self.refresh = RefreshToken.for_user(self.user)
         self.access_token = str(self.refresh.access_token)
 
-    @patch('utils.otp.send_mail')
-    def test_update_password_step1_send_otp(self, mock_send_mail):
+    @patch('utils.tasks.queue_otp_email')
+    def test_update_password_step1_send_otp(self, mock_queue):
         """Test update password step 1 - send OTP"""
-        mock_send_mail.return_value = True
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -596,13 +662,14 @@ class UpdatePasswordTestCase(APITestCase):
         response = self.client.patch(self.update_password_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
-        self.assertIn('OTP sent to your email', response.data['message'])
+        self.assertIn('OTP is being sent to your email', response.data['message'])
         self.assertIn('otp_id', response.data)
 
-    @patch('utils.otp.send_mail')
-    def test_update_password_step2_verify_otp_and_update(self, mock_send_mail):
+    @patch('utils.tasks.queue_otp_email')
+    def test_update_password_step2_verify_otp_and_update(self, mock_queue):
         """Test update password step 2 - verify OTP and update password"""
-        mock_send_mail.return_value = True
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
 
@@ -644,27 +711,71 @@ class UpdatePasswordTestCase(APITestCase):
         self.assertTrue('old_password' in error_details or 'non_field_errors' in error_details)
 
     def test_update_password_mismatch(self):
-        """Test update password with mismatched new passwords"""
+        """Test update password with mismatched new passwords in 2-step async flow"""
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
             'old_password': 'OldPass123#',
             'new_password': 'NewStrongPass123#',
             'new_password_confirm': 'DifferentPass123#'
         }
+
+        # Step 1: Send data without OTP - should succeed and send OTP
         response = self.client.patch(self.update_password_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertIn('OTP is being sent', response.data['message'])
+
+        # Step 2: Send same data with valid OTP - should fail validation for password mismatch
+        from apps.otp.models import OTP
+        import random
+
+        # Create valid OTP (same format as utils/otp.py)
+        otp_code = f"{random.randint(0, 999999):06d}"
+        otp_instance = OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password(otp_code),
+            purpose='reset',
+            used=False
+        )
+
+        data_with_otp = data.copy()
+        data_with_otp['otp'] = otp_code
+        response = self.client.patch(self.update_password_url, data_with_otp, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         error_details = response.data['error']['details']
         self.assertTrue('new_password' in error_details or 'new_password_confirm' in error_details or 'non_field_errors' in error_details)
 
     def test_update_password_weak_new_password(self):
-        """Test update password with weak new password"""
+        """Test update password with weak new password in 2-step async flow"""
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
             'old_password': 'OldPass123#',
             'new_password': 'weak',
             'new_password_confirm': 'weak'
         }
+
+        # Step 1: Send data without OTP - should succeed and send OTP
         response = self.client.patch(self.update_password_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertIn('OTP is being sent', response.data['message'])
+
+        # Step 2: Send same data with valid OTP - should fail validation for weak password
+        from apps.otp.models import OTP
+        import random
+
+        # Create valid OTP (same format as utils/otp.py)
+        otp_code = f"{random.randint(0, 999999):06d}"
+        otp_instance = OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password(otp_code),
+            purpose='reset',
+            used=False
+        )
+
+        data_with_otp = data.copy()
+        data_with_otp['otp'] = otp_code
+        response = self.client.patch(self.update_password_url, data_with_otp, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('new_password', response.data['error']['details'])
 
@@ -771,10 +882,11 @@ class UpdateUserViewTestCase(APITestCase):
         self.assertEqual(response.data['message'], 'Profile updated successfully')
         self.assertEqual(response.data['data']['name'], 'Updated Name')
 
-    @patch('utils.otp.send_mail')
-    def test_update_sensitive_fields_requires_otp_step1(self, mock_send_mail):
+    @patch('utils.tasks.queue_otp_email')
+    def test_update_sensitive_fields_requires_otp_step1(self, mock_queue):
         """Test updating sensitive fields (email) - step 1: OTP required"""
-        mock_send_mail.return_value = True
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -784,14 +896,15 @@ class UpdateUserViewTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
-        self.assertIn('OTP sent to your email', response.data['message'])
+        self.assertIn('OTP is being sent to your email', response.data['message'])
         self.assertIn('otp_id', response.data)
         self.assertIn('next_step', response.data)
 
-    @patch('utils.otp.send_mail')
-    def test_update_sensitive_fields_requires_otp_step2(self, mock_send_mail):
+    @patch('utils.tasks.queue_otp_email')
+    def test_update_sensitive_fields_requires_otp_step2(self, mock_queue):
         """Test updating sensitive fields (email) - step 2: OTP verification"""
-        mock_send_mail.return_value = True
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
 
@@ -808,7 +921,7 @@ class UpdateUserViewTestCase(APITestCase):
                  'otp_obj': type('MockOTP', (), {
                      'purpose': 'profile_update',
                      'used': False,
-                     'save': lambda: None
+                     'save': lambda self: None
                  })()
              }):
 
@@ -821,10 +934,11 @@ class UpdateUserViewTestCase(APITestCase):
             self.assertTrue(step2_response.data['success'])
             self.assertEqual(step2_response.data['message'], 'Profile updated successfully')
 
-    @patch('utils.otp.send_mail')
-    def test_update_phone_requires_otp(self, mock_send_mail):
+    @patch('utils.tasks.queue_otp_email')
+    def test_update_phone_requires_otp(self, mock_queue):
         """Test updating phone number requires OTP"""
-        mock_send_mail.return_value = True
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -834,12 +948,13 @@ class UpdateUserViewTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
-        self.assertIn('OTP sent to your email', response.data['message'])
+        self.assertIn('OTP is being sent to your email', response.data['message'])
 
-    @patch('utils.otp.send_mail')
-    def test_update_role_requires_otp(self, mock_send_mail):
+    @patch('utils.tasks.queue_otp_email')
+    def test_update_role_requires_otp(self, mock_queue):
         """Test updating role requires OTP"""
-        mock_send_mail.return_value = True
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -849,12 +964,13 @@ class UpdateUserViewTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
-        self.assertIn('OTP sent to your email', response.data['message'])
+        self.assertIn('OTP is being sent to your email', response.data['message'])
 
-    @patch('utils.otp.send_mail')
-    def test_update_mixed_fields_requires_otp(self, mock_send_mail):
+    @patch('utils.tasks.queue_otp_email')
+    def test_update_mixed_fields_requires_otp(self, mock_queue):
         """Test updating mix of sensitive and non-sensitive fields requires OTP"""
-        mock_send_mail.return_value = True
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -866,7 +982,7 @@ class UpdateUserViewTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
-        self.assertIn('OTP sent to your email', response.data['message'])
+        self.assertIn('OTP is being sent to your email', response.data['message'])
 
     def test_update_invalid_email_format(self):
         """Test updating with invalid email format"""
@@ -931,7 +1047,9 @@ class UpdateUserViewTestCase(APITestCase):
             response = self.client.patch(self.update_user_url, data, format='json')
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
             self.assertFalse(response.data['success'])
-            self.assertIn('OTP is not for profile update', response.data['error'])
+            # Error is now in structured format
+            error_details = str(response.data['error']['details'])
+            self.assertIn('OTP is not for profile update', error_details)
 
     def test_update_otp_wrong_user(self):
         """Test OTP verification with OTP belonging to different user"""
@@ -959,7 +1077,9 @@ class UpdateUserViewTestCase(APITestCase):
             response = self.client.patch(self.update_user_url, data, format='json')
             self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
             self.assertFalse(response.data['success'])
-            self.assertIn('OTP does not belong to authenticated user', response.data['error'])
+            # Error is now in structured format
+            error_details = str(response.data['error']['details'])
+            self.assertIn('OTP does not belong to authenticated user', error_details)
 
     def test_otp_send_failure(self):
         """Test OTP send failure"""
@@ -972,4 +1092,4 @@ class UpdateUserViewTestCase(APITestCase):
 
             self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
             self.assertFalse(response.data['success'])
-            self.assertIn('Failed to send OTP', response.data['error'])
+            self.assertIn('Failed to generate OTP', response.data['error'])
