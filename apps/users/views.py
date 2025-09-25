@@ -58,31 +58,45 @@ def signup(request):
     user.is_verified = False
     user.save()
 
-    # Send OTP for verification
+    # Send OTP for verification (async)
     try:
         from utils.otp import generate_and_send_otp
-        otp_instance = generate_and_send_otp(user, 'signup')
+        otp_result = generate_and_send_otp(user, 'signup')
 
-        return Response({
-            'success': True,
-            'message': 'Account created successfully. Please verify your email with the OTP sent to complete registration.',
-            'user_id': str(user.id),
-            'email': user.email,
-            'is_verified': user.is_verified,
-            'otp_sent': True,
-            'next_step': 'Verify OTP using POST /api/v1/otp/verify/?action=signup to get access tokens'
-        }, status=status.HTTP_201_CREATED)
+        if otp_result['success']:
+            return Response({
+                'success': True,
+                'message': 'Account created successfully. OTP is being sent to your email for verification.',
+                'user_id': str(user.id),
+                'email': user.email,
+                'is_verified': user.is_verified,
+                'otp_sent': otp_result['queued'],
+                'otp_id': str(otp_result['otp_instance'].id),
+                'next_step': 'Verify OTP using POST /api/v1/otp/verify/?action=signup to get access tokens'
+            }, status=status.HTTP_201_CREATED)
+        else:
+            logger.error(f"OTP queuing failed for user {user.email}: {otp_result.get('error')}")
+            return Response({
+                'success': True,
+                'message': 'Account created successfully. OTP email will be sent shortly.',
+                'user_id': str(user.id),
+                'email': user.email,
+                'is_verified': user.is_verified,
+                'otp_sent': False,
+                'otp_id': str(otp_result['otp_instance'].id),
+                'warning': 'OTP email may be delayed. Use POST /api/v1/otp/send/ to request another OTP if needed.'
+            }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
-        logger.error(f"OTP sending failed for user {user.email}: {str(e)}")
+        logger.error(f"OTP generation failed for user {user.email}: {str(e)}")
         return Response({
             'success': True,
-            'message': 'Account created successfully, but failed to send verification OTP.',
+            'message': 'Account created successfully, but failed to generate verification OTP.',
             'user_id': str(user.id),
             'email': user.email,
             'is_verified': user.is_verified,
             'otp_sent': False,
-            'error': 'Failed to send OTP. Use POST /api/v1/otp/send/ to request verification OTP.'
+            'error': 'Failed to generate OTP. Use POST /api/v1/otp/send/ to request verification OTP.'
         }, status=status.HTTP_201_CREATED)
 
 
@@ -171,11 +185,12 @@ class ForgotPasswordView(generics.GenericAPIView):
                 "message": "If the email exists, password reset instructions will be sent."
             }, status=status.HTTP_200_OK)
 
-        # Send OTP for password reset
+        # Send OTP for password reset (async)
         try:
             from utils.otp import generate_and_send_otp
-            otp_instance = generate_and_send_otp(user, 'reset')
+            otp_result = generate_and_send_otp(user, 'reset')
 
+            # Always return success for security (don't reveal if email exists)
             return Response({
                 "success": True,
                 "message": "If the email exists, password reset instructions will be sent.",
@@ -183,11 +198,11 @@ class ForgotPasswordView(generics.GenericAPIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Password reset OTP sending failed for user {user.email}: {str(e)}")
+            logger.error(f"Password reset OTP generation failed for user {user.email}: {str(e)}")
             return Response({
-                "success": False,
-                "error": "Failed to send password reset instructions. Please try again."
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                "success": True,  # Still return success for security
+                "message": "If the email exists, password reset instructions will be sent."
+            }, status=status.HTTP_200_OK)
 
 
 # PATCH /api/v1/users/updatePassword/
@@ -212,19 +227,28 @@ class UpdatePasswordView(generics.GenericAPIView):
             if not user.check_password(old_password):
                 raise ValidationError('Current password is incorrect')
 
-            # Send OTP
+            # Send OTP (async)
             try:
                 from utils.otp import generate_and_send_otp
-                otp_instance = generate_and_send_otp(user, 'reset')
+                otp_result = generate_and_send_otp(user, 'reset')
 
-                return Response({
-                    'success': True,
-                    'message': 'OTP sent to your email. Please provide OTP and new_password to complete password update.',
-                    'otp_id': str(otp_instance.id)
-                }, status=status.HTTP_200_OK)
+                if otp_result['success']:
+                    return Response({
+                        'success': True,
+                        'message': 'OTP is being sent to your email. Please provide OTP and new_password to complete password update.',
+                        'otp_id': str(otp_result['otp_instance'].id),
+                        'otp_queued': otp_result['queued']
+                    }, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        'success': True,
+                        'message': 'OTP will be sent to your email shortly. Please provide OTP and new_password to complete password update.',
+                        'otp_id': str(otp_result['otp_instance'].id),
+                        'otp_queued': False
+                    }, status=status.HTTP_200_OK)
             except Exception as e:
-                logger.error(f"Password update OTP sending failed for user {user.email}: {str(e)}")
-                raise ValidationError('Failed to send OTP. Please try again.')
+                logger.error(f"Password update OTP generation failed for user {user.email}: {str(e)}")
+                raise ValidationError('Failed to generate OTP. Please try again.')
 
         else:
             # Step 2: Verify OTP and update password
@@ -296,22 +320,32 @@ class UpdateUserView(generics.GenericAPIView):
                 serializer = self.get_serializer(user, data=request.data, partial=True)
                 serializer.is_valid(raise_exception=True)
 
-                # Send OTP for profile update
+                # Send OTP for profile update (async)
                 try:
                     from utils.otp import generate_and_send_otp
-                    otp_instance = generate_and_send_otp(user, 'profile_update')
+                    otp_result = generate_and_send_otp(user, 'profile_update')
 
-                    return Response({
-                        'success': True,
-                        'message': 'Profile update requires verification. OTP sent to your email.',
-                        'otp_id': str(otp_instance.id),
-                        'next_step': 'Provide the same data along with the OTP to complete the update'
-                    }, status=status.HTTP_200_OK)
+                    if otp_result['success']:
+                        return Response({
+                            'success': True,
+                            'message': 'Profile update requires verification. OTP is being sent to your email.',
+                            'otp_id': str(otp_result['otp_instance'].id),
+                            'otp_queued': otp_result['queued'],
+                            'next_step': 'Provide the same data along with the OTP to complete the update'
+                        }, status=status.HTTP_200_OK)
+                    else:
+                        return Response({
+                            'success': True,
+                            'message': 'Profile update requires verification. OTP will be sent to your email shortly.',
+                            'otp_id': str(otp_result['otp_instance'].id),
+                            'otp_queued': False,
+                            'next_step': 'Provide the same data along with the OTP to complete the update'
+                        }, status=status.HTTP_200_OK)
                 except Exception as e:
-                    logger.error(f"Profile update OTP sending failed for user {user.email}: {str(e)}")
+                    logger.error(f"Profile update OTP generation failed for user {user.email}: {str(e)}")
                     return Response({
                         'success': False,
-                        'error': 'Failed to send OTP. Please try again.'
+                        'error': 'Failed to generate OTP. Please try again.'
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             else:
                 # Direct update for non-sensitive fields

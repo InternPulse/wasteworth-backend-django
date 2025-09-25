@@ -163,6 +163,31 @@ def get_error_code(exc):
     return ErrorCodes.SERVER_ERROR
 
 
+def get_frontend_friendly_message(original_data, fallback_message):
+    """Extract the most user-friendly message for frontend display"""
+
+    # If original_data is a dict with field errors, extract the most relevant message
+    if isinstance(original_data, dict):
+        # Priority 1: non_field_errors (general errors like login failures)
+        if 'non_field_errors' in original_data and original_data['non_field_errors']:
+            first_error = original_data['non_field_errors'][0]
+            return str(first_error).replace('ErrorDetail(string=', '').replace("', code='invalid')", '').strip("'\"")
+
+        # Priority 2: First field error (like password validation)
+        for field_name, field_errors in original_data.items():
+            if field_name != 'non_field_errors' and field_errors:
+                first_error = field_errors[0]
+                return str(first_error).replace('ErrorDetail(string=', '').replace("', code='invalid')", '').strip("'\"")
+
+    # Priority 3: Check if original data is a list
+    elif isinstance(original_data, list) and original_data:
+        first_error = original_data[0]
+        return str(first_error).replace('ErrorDetail(string=', '').replace("', code='invalid')", '').strip("'\"")
+
+    # Fallback to the provided message
+    return fallback_message
+
+
 def custom_exception_handler(exc, context):
     """Custom exception handler that formats all errors consistently"""
     response = exception_handler(exc, context)
@@ -172,8 +197,12 @@ def custom_exception_handler(exc, context):
         user_message = get_user_friendly_message(exc)
         field_errors = format_field_errors(response.data)
 
+        # Get the most relevant user-friendly message
+        frontend_message = get_frontend_friendly_message(response.data, user_message)
+
         custom_response_data = {
             'success': False,
+            'message': frontend_message,  # Easy access for frontend
             'error': {
                 'code': error_code,
                 'message': user_message,
@@ -182,5 +211,6 @@ def custom_exception_handler(exc, context):
         }
 
         response.data = custom_response_data
+        response.content_type = 'application/json'
 
     return response
