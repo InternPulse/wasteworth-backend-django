@@ -3,6 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.serializers import ValidationError
+from rest_framework.exceptions import NotFound
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 from django.conf import settings
@@ -49,10 +50,7 @@ def send_otp(request):
         }, status=status.HTTP_200_OK)
 
     except User.DoesNotExist:
-        return Response({
-            'success': False,
-            'error': 'User not found'
-        }, status=status.HTTP_404_NOT_FOUND)
+        raise NotFound('User not found')
     except Exception as e:
         logger.error(f"OTP sending failed for user {email_or_phone}: {str(e)}")
         return Response({
@@ -177,10 +175,7 @@ def resend_otp(request):
         }, status=status.HTTP_200_OK)
 
     except User.DoesNotExist:
-        return Response({
-            'success': False,
-            'error': 'User not found'
-        }, status=status.HTTP_404_NOT_FOUND)
+        raise NotFound('User not found')
     except Exception as e:
         logger.error(f"OTP resend failed for user {email_or_phone}: {str(e)}")
         return Response({
