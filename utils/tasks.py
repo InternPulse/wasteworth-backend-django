@@ -1,7 +1,18 @@
 """
 Background tasks for the Wasteworth application.
 """
-import django_rq
+# Temporarily using a dummy django_rq for development
+try:
+    import django_rq
+except ImportError:
+    # Create dummy decorator for development
+    class DummyQueue:
+        def job(self, queue_name):
+            def decorator(func):
+                return func
+            return decorator
+    django_rq = DummyQueue()
+
 from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
@@ -124,12 +135,21 @@ def queue_otp_email(user, purpose, priority='default'):
     job_function = job_functions.get(purpose, send_otp_email_async)
 
     # Queue the task
-    job = django_rq.enqueue(
-        job_function,
-        user.id,
-        purpose,
-        queue=queue_name
-    )
+    try:
+        # Try to use django_rq if available
+        job = django_rq.enqueue(
+            job_function,
+            user.id,
+            purpose,
+            queue=queue_name
+        )
+        logger.info(f"OTP email task queued with job ID: {job.id}")
+        return job
+    except (AttributeError, ImportError):
+        # Direct execution during development
+        logger.info(f"Running OTP email task directly (django_rq not available)")
+        job_function(user.id, purpose)
+        return None
 
-    logger.info(f"OTP email task queued with job ID: {job.id}")
-    return job
+    # This line is now handled inside the try/except block above
+    pass
