@@ -164,27 +164,10 @@ def get_error_code(exc):
 
 
 def get_frontend_friendly_message(original_data, fallback_message):
-    """Extract the most user-friendly message for frontend display"""
+    """Return user-friendly message for frontend display, with raw errors preserved in details"""
 
-    # If original_data is a dict with field errors, extract the most relevant message
-    if isinstance(original_data, dict):
-        # Priority 1: non_field_errors (general errors like login failures)
-        if 'non_field_errors' in original_data and original_data['non_field_errors']:
-            first_error = original_data['non_field_errors'][0]
-            return str(first_error).replace('ErrorDetail(string=', '').replace("', code='invalid')", '').strip("'\"")
-
-        # Priority 2: First field error (like password validation)
-        for field_name, field_errors in original_data.items():
-            if field_name != 'non_field_errors' and field_errors:
-                first_error = field_errors[0]
-                return str(first_error).replace('ErrorDetail(string=', '').replace("', code='invalid')", '').strip("'\"")
-
-    # Priority 3: Check if original data is a list
-    elif isinstance(original_data, list) and original_data:
-        first_error = original_data[0]
-        return str(first_error).replace('ErrorDetail(string=', '').replace("', code='invalid')", '').strip("'\"")
-
-    # Fallback to the provided message
+    # Always return the user-friendly message as the top-level message
+    # The raw field errors will still be available in error.details
     return fallback_message
 
 

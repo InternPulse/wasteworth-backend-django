@@ -23,6 +23,7 @@ Authorization: Bearer <access_token>
 ```json
 {
   "success": false,
+  "message": "User-friendly error message for easy frontend display",
   "error": {
     "code": "ERROR_CODE",
     "message": "User-friendly error message",
@@ -32,6 +33,12 @@ Authorization: Bearer <access_token>
   }
 }
 ```
+
+**Key Points:**
+- **Top-level `message`**: Always user-friendly for direct frontend display
+- **`error.message`**: Same user-friendly message for consistency
+- **`error.details`**: Raw field errors preserved for debugging
+- **`error.code`**: Programmatic error handling
 
 **Common Error Codes:**
 - `VALIDATION_ERROR` - Invalid input data
@@ -45,15 +52,18 @@ Authorization: Bearer <access_token>
 
 ## Quick Start Guide
 
-### 1. Sign Up → Verify → Login
+### 1. Sign Up → Send OTP → Verify → Login
 ```bash
-# Step 1: Create account (sends OTP to email)
+# Step 1: Create account (user created but unverified)
 POST /users/signup/
 
-# Step 2: Verify OTP to complete registration
+# Step 2: Send OTP email separately
+POST /otp/send/
+
+# Step 3: Verify OTP to complete registration
 POST /otp/verify/?action=signup
 
-# Step 3: Login normally (no OTP needed)
+# Step 4: Login normally (no OTP needed)
 POST /users/login/
 ```
 
@@ -84,7 +94,7 @@ PATCH /users/update-user/ (with same data + OTP)
 #### 1. User Signup
 **POST** `/users/signup/`
 
-Creates a new **unverified** user account and sends OTP to email.
+Creates a new **unverified** user account. **OTP must be sent separately** using `/otp/send/`.
 
 **Request Body:**
 ```json
@@ -104,12 +114,11 @@ Creates a new **unverified** user account and sends OTP to email.
 ```json
 {
     "success": true,
-    "message": "Account created successfully. Please verify your email with the OTP sent to complete registration.",
+    "message": "Account created successfully. Use POST /api/v1/otp/send/ to request verification OTP.",
     "user_id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
     "email": "user@example.com",
     "is_verified": false,
-    "otp_sent": true,
-    "next_step": "Verify OTP using POST /api/v1/otp/verify/?action=signup to get access tokens"
+    "next_step": "Send OTP using POST /api/v1/otp/send/ then verify with POST /api/v1/otp/verify/?action=signup"
 }
 ```
 
@@ -544,6 +553,28 @@ Resends OTP and invalidates previous ones.
 }
 ```
 
+#### 12. Request Password Reset (OTP Method)
+**POST** `/otp/request-password-reset/`
+
+Alternative method to request password reset OTP. More direct than `/users/forgotPassword/`.
+
+**Request Body:**
+```json
+{
+    "email_or_phone": "user@example.com"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "OTP for password reset sent"
+}
+```
+
+**Note:** This endpoint provides the same functionality as `/users/forgotPassword/` but is more direct and part of the OTP module.
+
 ---
 
 ## 🔒 Security Features
@@ -555,6 +586,12 @@ Resends OTP and invalidates previous ones.
 - **Purpose validation** (signup OTP ≠ reset OTP ≠ profile_update OTP)
 - **Previous OTP invalidation** on resend
 - **Secure hashing** in database storage
+
+### Email Reliability
+- **120-second timeout** for email operations (vs 30-second default)
+- **Direct email sending** with improved timeout handling
+- **Reduced timeout errors** on deployed environments
+- **Consistent delivery** even under high load
 
 ### Password Requirements
 - **Minimum 8 characters**

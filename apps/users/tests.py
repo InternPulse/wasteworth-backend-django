@@ -483,11 +483,11 @@ class ForgotPasswordTestCase(APITestCase):
             password='StrongPass123#'
         )
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_forgot_password_valid_email(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_forgot_password_valid_email(self, mock_send_mail):
         """Test forgot password with valid email - now sends OTP"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         data = {'email': 'test@example.com'}
         response = self.client.post(self.forgot_password_url, data, format='json')
@@ -550,11 +550,11 @@ class OTPPasswordResetTestCase(APITestCase):
         self.update_password_url = '/api/v1/users/updatePassword/'
         self.otp_verify_url = '/api/v1/otp/verify/'
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_complete_otp_password_reset_flow(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_complete_otp_password_reset_flow(self, mock_send_mail):
         """Test complete OTP-based password reset flow"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         # Step 1: Request password reset (sends OTP)
         forgot_data = {'email': 'reset@example.com'}
@@ -694,11 +694,11 @@ class UpdatePasswordTestCase(APITestCase):
         self.refresh = RefreshToken.for_user(self.user)
         self.access_token = str(self.refresh.access_token)
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_update_password_step1_send_otp(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_update_password_step1_send_otp(self, mock_send_mail):
         """Test update password step 1 - send OTP"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -710,11 +710,11 @@ class UpdatePasswordTestCase(APITestCase):
         self.assertIn('OTP is being sent to your email', response.data['message'])
         self.assertIn('otp_id', response.data)
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_update_password_step2_verify_otp_and_update(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_update_password_step2_verify_otp_and_update(self, mock_send_mail):
         """Test update password step 2 - verify OTP and update password"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
 
@@ -927,11 +927,11 @@ class UpdateUserViewTestCase(APITestCase):
         self.assertEqual(response.data['message'], 'Profile updated successfully')
         self.assertEqual(response.data['data']['name'], 'Updated Name')
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_update_sensitive_fields_requires_otp_step1(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_update_sensitive_fields_requires_otp_step1(self, mock_send_mail):
         """Test updating sensitive fields (email) - step 1: OTP required"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -945,11 +945,11 @@ class UpdateUserViewTestCase(APITestCase):
         self.assertIn('otp_id', response.data)
         self.assertIn('next_step', response.data)
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_update_sensitive_fields_requires_otp_step2(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_update_sensitive_fields_requires_otp_step2(self, mock_send_mail):
         """Test updating sensitive fields (email) - step 2: OTP verification"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
 
@@ -979,11 +979,11 @@ class UpdateUserViewTestCase(APITestCase):
             self.assertTrue(step2_response.data['success'])
             self.assertEqual(step2_response.data['message'], 'Profile updated successfully')
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_update_phone_requires_otp(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_update_phone_requires_otp(self, mock_send_mail):
         """Test updating phone number requires OTP"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -995,11 +995,11 @@ class UpdateUserViewTestCase(APITestCase):
         self.assertTrue(response.data['success'])
         self.assertIn('OTP is being sent to your email', response.data['message'])
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_update_role_requires_otp(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_update_role_requires_otp(self, mock_send_mail):
         """Test updating role requires OTP"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
@@ -1011,11 +1011,11 @@ class UpdateUserViewTestCase(APITestCase):
         self.assertTrue(response.data['success'])
         self.assertIn('OTP is being sent to your email', response.data['message'])
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_update_mixed_fields_requires_otp(self, mock_queue):
+    @patch('utils.otp.send_mail')
+    def test_update_mixed_fields_requires_otp(self, mock_send_mail):
         """Test updating mix of sensitive and non-sensitive fields requires OTP"""
         from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
+        mock_send_mail.return_value = True
 
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + self.access_token)
         data = {
