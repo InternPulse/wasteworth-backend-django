@@ -44,7 +44,9 @@ class WalletTransaction(models.Model):
         ('voucher', 'Voucher'),
         ('system', 'System Credit'),
         ('card', 'Card Payment'),
-        ('paypal', 'PayPal'),
+        ('referral_reward', 'Referral Reward'),
+        ('activity_reward', 'Activity Reward'),
+        ('redeem', 'Redeem Points'),
     ]
 
     STATUS_CHOICES = [
@@ -56,7 +58,7 @@ class WalletTransaction(models.Model):
     ]
 
     transaction_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='transactions')
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='transactions', null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wallet_transactions')
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPE_CHOICES)
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Amount in currency")
