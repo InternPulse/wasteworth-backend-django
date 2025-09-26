@@ -32,6 +32,14 @@ def send_otp(request):
         # Generate and send OTP
         otp_result = generate_and_send_otp(user, purpose)
 
+        # Check if OTP sending was successful
+        if not otp_result.get('success', False):
+            logger.error(f"OTP sending failed for user {email_or_phone}: {otp_result.get('error', 'Unknown error')}")
+            return Response({
+                'success': False,
+                'error': 'Failed to send OTP. Please try again.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         return Response({
             'success': True,
             'message': 'OTP sent successfully',
@@ -155,6 +163,14 @@ def resend_otp(request):
         # Generate new OTP
         otp_result = generate_and_send_otp(user, purpose)
 
+        # Check if OTP sending was successful
+        if not otp_result.get('success', False):
+            logger.error(f"OTP resend failed for user {email_or_phone}: {otp_result.get('error', 'Unknown error')}")
+            return Response({
+                'success': False,
+                'error': 'Failed to send OTP. Please try again.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         return Response({
             'success': True,
             'message': 'New OTP sent successfully',
@@ -194,18 +210,20 @@ def request_password_reset(request):
             user = User.objects.get(phone=email_or_phone)
 
         # Generate and send OTP for password reset
-        try:
-            otp_instance = generate_and_send_otp(user, purpose='reset')
-            return Response({
-                'success': True,
-                'message': 'OTP for password reset sent'
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            logger.error(f"Password reset OTP sending failed for user {email_or_phone}: {str(e)}")
+        otp_result = generate_and_send_otp(user, purpose='reset')
+
+        # Check if OTP sending was successful
+        if not otp_result.get('success', False):
+            logger.error(f"Password reset OTP sending failed for user {email_or_phone}: {otp_result.get('error', 'Unknown error')}")
             return Response({
                 'success': False,
                 'error': 'Failed to send OTP. Please try again.'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            'success': True,
+            'message': 'OTP for password reset sent'
+        }, status=status.HTTP_200_OK)
 
     except User.DoesNotExist:
         # In development, be explicit about user not found

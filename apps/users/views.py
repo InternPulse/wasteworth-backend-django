@@ -46,7 +46,7 @@ User = get_user_model()
 # User Authentication Views (Function-based)
 # ------------------------------
 
-# POST /api/v1/users/signup/
+# POST /api/v1/users/signup/ - Create user account (OTP sending is separate)
 @api_view(['POST'])
 def signup(request):
     serializer = UserSignupSerializer(data=request.data)
@@ -58,46 +58,14 @@ def signup(request):
     user.is_verified = False
     user.save()
 
-    # Send OTP for verification (async)
-    try:
-        from utils.otp import generate_and_send_otp
-        otp_result = generate_and_send_otp(user, 'signup')
-
-        if otp_result['success']:
-            return Response({
-                'success': True,
-                'message': 'Account created successfully. OTP is being sent to your email for verification.',
-                'user_id': str(user.id),
-                'email': user.email,
-                'is_verified': user.is_verified,
-                'otp_sent': otp_result['queued'],
-                'otp_id': str(otp_result['otp_instance'].id),
-                'next_step': 'Verify OTP using POST /api/v1/otp/verify/?action=signup to get access tokens'
-            }, status=status.HTTP_201_CREATED)
-        else:
-            logger.error(f"OTP queuing failed for user {user.email}: {otp_result.get('error')}")
-            return Response({
-                'success': True,
-                'message': 'Account created successfully. OTP email will be sent shortly.',
-                'user_id': str(user.id),
-                'email': user.email,
-                'is_verified': user.is_verified,
-                'otp_sent': False,
-                'otp_id': str(otp_result['otp_instance'].id),
-                'warning': 'OTP email may be delayed. Use POST /api/v1/otp/send/ to request another OTP if needed.'
-            }, status=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        logger.error(f"OTP generation failed for user {user.email}: {str(e)}")
-        return Response({
-            'success': True,
-            'message': 'Account created successfully, but failed to generate verification OTP.',
-            'user_id': str(user.id),
-            'email': user.email,
-            'is_verified': user.is_verified,
-            'otp_sent': False,
-            'error': 'Failed to generate OTP. Use POST /api/v1/otp/send/ to request verification OTP.'
-        }, status=status.HTTP_201_CREATED)
+    return Response({
+        'success': True,
+        'message': 'Account created successfully. Use POST /api/v1/otp/send/ to request verification OTP.',
+        'user_id': str(user.id),
+        'email': user.email,
+        'is_verified': user.is_verified,
+        'next_step': 'Send OTP using POST /api/v1/otp/send/ then verify with POST /api/v1/otp/verify/?action=signup'
+    }, status=status.HTTP_201_CREATED)
 
 
 # POST /api/v1/users/login/
@@ -189,6 +157,10 @@ class ForgotPasswordView(generics.GenericAPIView):
         try:
             from utils.otp import generate_and_send_otp
             otp_result = generate_and_send_otp(user, 'reset')
+
+            # Check if OTP sending failed, but still return success for security
+            if not otp_result.get('success', False):
+                logger.error(f"Password reset OTP generation failed for user {user.email}: {otp_result.get('error', 'Unknown error')}")
 
             # Always return success for security (don't reveal if email exists)
             return Response({

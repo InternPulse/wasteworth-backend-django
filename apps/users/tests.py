@@ -17,6 +17,7 @@ User = get_user_model()
 class UserSignupTestCase(APITestCase):
     def setUp(self):
         self.signup_url = '/api/v1/users/signup/'
+        self.otp_send_url = '/api/v1/otp/send/'
         self.valid_signup_data = {
             'name': 'Test User',
             'email': 'test@example.com',
@@ -25,11 +26,7 @@ class UserSignupTestCase(APITestCase):
             'role': 'disposer'
         }
 
-    @patch('utils.tasks.queue_otp_email')
-    def test_valid_signup(self, mock_queue):
-        from unittest.mock import MagicMock
-        mock_queue.return_value = MagicMock(id='test-job-id')
-
+    def test_valid_signup(self):
         response = self.client.post(self.signup_url, self.valid_signup_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('success', response.data)
@@ -37,9 +34,10 @@ class UserSignupTestCase(APITestCase):
         self.assertIn('user_id', response.data)
         self.assertIn('email', response.data)
         self.assertIn('is_verified', response.data)
-        self.assertIn('otp_sent', response.data)
+        self.assertIn('next_step', response.data)
         self.assertTrue(response.data['success'])
         self.assertIn('Account created successfully', response.data['message'])
+        self.assertIn('POST /api/v1/otp/send/', response.data['message'])
 
         # Verify user was created in database as unverified
         user = User.objects.get(email='test@example.com')
@@ -161,6 +159,53 @@ class UserSignupTestCase(APITestCase):
         self.assertIn('error', response.data)
         self.assertFalse(response.data['success'])
         self.assertIn('role', response.data['error']['details'])
+
+    def test_signup_then_otp_send_flow(self):
+        """Test complete signup + OTP send flow"""
+        # Step 1: Sign up user
+        response = self.client.post(self.signup_url, self.valid_signup_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user_email = response.data['email']
+        self.assertEqual(user_email, 'test@example.com')
+        self.assertFalse(response.data['is_verified'])
+
+        # Step 2: Send OTP for verification
+        otp_data = {
+            'email_or_phone': user_email,
+            'purpose': 'signup'
+        }
+        otp_response = self.client.post(self.otp_send_url, otp_data, format='json')
+        self.assertEqual(otp_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(otp_response.data['success'])
+        self.assertIn('OTP sent successfully', otp_response.data['message'])
+        self.assertIn('otp_id', otp_response.data)
+
+    def test_signup_does_not_send_otp_automatically(self):
+        """Test that signup endpoint no longer sends OTP automatically"""
+        response = self.client.post(self.signup_url, self.valid_signup_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Should not contain OTP-related fields that indicated automatic sending
+        self.assertNotIn('otp_sent', response.data)
+        self.assertNotIn('otp_id', response.data)
+        self.assertNotIn('queued', response.data)
+
+        # Message should direct to separate OTP endpoint
+        self.assertIn('POST /api/v1/otp/send/', response.data['message'])
+
+    def test_signup_response_structure(self):
+        """Test that signup response has the expected structure"""
+        response = self.client.post(self.signup_url, self.valid_signup_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        expected_fields = ['success', 'message', 'user_id', 'email', 'is_verified', 'next_step']
+        for field in expected_fields:
+            self.assertIn(field, response.data, f"Field '{field}' should be in response")
+
+        self.assertTrue(response.data['success'])
+        self.assertFalse(response.data['is_verified'])
+        self.assertIn('Send OTP using POST /api/v1/otp/send/', response.data['next_step'])
 
 
 class UserLoginTestCase(APITestCase):
