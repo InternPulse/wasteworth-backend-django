@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.serializers import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 from django.conf import settings
@@ -77,10 +78,8 @@ def verify_otp(request):
     # Validate OTP using serializer
     serializer = OTPVerifySerializer(data=request.data)
     if not serializer.is_valid():
-        return Response({
-            'success': False,
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+        # Let the exception handler format the error properly
+        raise ValidationError(serializer.errors)
 
     user = serializer.validated_data['user']
     otp_obj = serializer.validated_data['otp_obj']
