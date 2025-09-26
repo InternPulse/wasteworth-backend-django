@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from decouple import config
-from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,12 +21,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-uavw#m!wu%3d6*k9%y4$54pqh^5j_(6%_hqv1ibw4_3!a^d+mg')
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-fallback-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -42,19 +42,17 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
-    'corsheaders',
-    'django_rq',
+    'django_rq',  
     'apps.users',
     'apps.listings',
     'apps.wallet',
     'apps.notifications',
-    'apps.otp',
-    'apps.marketplace',
-    'apps.referral',
+    'apps.otp',            # Added OTP app
+    'apps.referral',       # Added referral app
+    'apps.marketplace',    # Added marketplace app
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -62,7 +60,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'utils.middleware.ExceptionMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -90,25 +87,37 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 import sys
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
-        'USER': config('DATABASE_USER', default='avnadmin'),
-        'PASSWORD': config('DATABASE_PASSWORD', default='localpass'),
-        'HOST': config('DATABASE_HOST', default='localhost'),
-        'PORT': config('DATABASE_PORT', default='5432'),
-        'OPTIONS': {
-            'sslmode': config('SSL_MODE', default='disable'),
-        } if config('SSL_MODE', default='disable') != 'disable' else {},
-    }
-}
+# Check if we should use PostgreSQL or SQLite
+USE_POSTGRES = config('USE_POSTGRES', default='False', cast=bool)
 
-# Use SQLite for testing with fresh schema
+if USE_POSTGRES:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
+            'USER': config('DATABASE_USER', default='avnadmin'),
+            'PASSWORD': config('DATABASE_PASSWORD', default='localpass'),
+            'HOST': config('DATABASE_HOST', default='localhost'),
+            'PORT': config('DATABASE_PORT', default='5432'),
+            'OPTIONS': {
+                'sslmode': config('SSL_MODE', default='disable'),
+            } if config('SSL_MODE', default='disable') != 'disable' else {},
+        }
+    }
+else:
+    # Use SQLite for local development
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+# Use SQLite for testing
 if 'test' in sys.argv:
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
+        'NAME': ':memory:'
     }
 
 
@@ -130,105 +139,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# REST Framework Configuration
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny'
-    ],
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-    ],
-    'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
-    ],
-    'TEST_REQUEST_DEFAULT_FORMAT': 'json',
-    'EXCEPTION_HANDLER': 'utils.error_handler.custom_exception_handler',
-}
-
-# JWT Configuration
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
-}
-
-# CORS Configuration
-# Development origins
-CORS_ALLOWED_ORIGINS_DEV = [
-    "http://localhost:3000",  # React default
-    "http://127.0.0.1:3000",
-    "http://localhost:3001",  # Alternative React port
-    "http://127.0.0.1:3001",
-    "http://localhost:5173",  # Vite default
-    "http://127.0.0.1:5173",
-]
-
-# Production origins (configure via environment variable)
-CORS_ALLOWED_ORIGINS_PROD = config('CORS_ALLOWED_ORIGINS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
-
-# Use production origins if available, otherwise use development origins
-CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_PROD if CORS_ALLOWED_ORIGINS_PROD else CORS_ALLOWED_ORIGINS_DEV
-
-CORS_ALLOW_CREDENTIALS = True
-
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
-
-# Email Backend Configuration
-if DEBUG:
-    # Development: print to console
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-else:
-    # Production: use SMTP from environment variables
-    EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
-    EMAIL_HOST = config('EMAIL_HOST', default='')
-    EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-    EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-    EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
-    EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-    EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@wasteworth.com')
-
-# Django-RQ Configuration
-RQ_QUEUES = {
-    'default': {
-        'HOST': config('REDIS_HOST', default='localhost'),
-        'PORT': config('REDIS_PORT', default=6379, cast=int),
-        'DB': config('REDIS_DB', default=0, cast=int),
-        'PASSWORD': config('REDIS_PASSWORD', default=None),
-        'DEFAULT_TIMEOUT': 360,
-    },
-    'high': {
-        'HOST': config('REDIS_HOST', default='localhost'),
-        'PORT': config('REDIS_PORT', default=6379, cast=int),
-        'DB': config('REDIS_DB', default=0, cast=int),
-        'PASSWORD': config('REDIS_PASSWORD', default=None),
-        'DEFAULT_TIMEOUT': 500,
-    },
-    'low': {
-        'HOST': config('REDIS_HOST', default='localhost'),
-        'PORT': config('REDIS_PORT', default=6379, cast=int),
-        'DB': config('REDIS_DB', default=0, cast=int),
-        'PASSWORD': config('REDIS_PASSWORD', default=None),
-        'DEFAULT_TIMEOUT': 500,
-    }
-}
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
@@ -255,28 +165,53 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Custom User Model
 AUTH_USER_MODEL = 'users.User'
 
-# Security Settings for Production
-if not DEBUG and 'test' not in sys.argv:
-    # HTTPS settings
-    SECURE_SSL_REDIRECT = not DEBUG  # Disable SSL redirect in development
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# REST Framework Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
 
-    # HSTS settings
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+# JWT Configuration
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+}
 
-    # Cookie settings
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_HTTPONLY = True
-    CSRF_COOKIE_HTTPONLY = True
+# Email Configuration - Read from environment
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='emmfatsneh@gmail.com')
 
-    # Content type sniffing
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-
-    # XSS protection
-    SECURE_BROWSER_XSS_FILTER = True
-
-    # Referrer policy
-    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+# Redis Queue Configuration - Temporarily commented out
+RQ_QUEUES = {
+    'default': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': 0,
+        'PASSWORD': config('REDIS_PASSWORD', default=''),
+        'DEFAULT_TIMEOUT': 360,
+    },
+    'high': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': 0,
+        'PASSWORD': config('REDIS_PASSWORD', default=''),
+        'DEFAULT_TIMEOUT': 500,
+    },
+    'low': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': 0,
+        'PASSWORD': config('REDIS_PASSWORD', default=''),
+        'DEFAULT_TIMEOUT': 500,
+    }
+}
