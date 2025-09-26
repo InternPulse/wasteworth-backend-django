@@ -6,10 +6,14 @@ import random
 import string
 
 # Get the absolute path of the current script
-current_script_path = os.path.dirname(os.path.abspath(__file__))
+current_script_path = os.path.abspath(__file__)
 
-# Get the project root directory (2 levels up from the current script)
+# Get the project root directory (wasteworth-backend-django folder)
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_script_path)))
+
+# Print debug info
+print(f"Current script: {current_script_path}")
+print(f"Project root detected: {project_root}")
 
 # Add the project root to the Python path
 if project_root not in sys.path:
