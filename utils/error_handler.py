@@ -2,6 +2,7 @@ from rest_framework.views import exception_handler
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.serializers import ValidationError
+from rest_framework.exceptions import NotFound
 from rest_framework_simplejwt.exceptions import TokenError
 from django.core.exceptions import ObjectDoesNotExist
 import re
@@ -145,7 +146,7 @@ def get_error_code(exc):
     """Determine the appropriate error code based on the exception"""
     if isinstance(exc, TokenError):
         return ErrorCodes.INVALID_TOKEN
-    elif isinstance(exc, ObjectDoesNotExist):
+    elif isinstance(exc, (ObjectDoesNotExist, NotFound)):
         return ErrorCodes.NOT_FOUND
     elif hasattr(exc, 'detail'):
         if isinstance(exc.detail, dict):
