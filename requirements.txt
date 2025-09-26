@@ -9,5 +9,3 @@ PyJWT==2.10.1
 python-decouple==3.8
 sqlparse==0.5.3
 tzdata==2025.2
-django-rq==2.10.2
-redis==5.0.8
