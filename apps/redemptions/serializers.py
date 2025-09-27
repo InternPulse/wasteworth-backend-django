@@ -1,4 +1,4 @@
-from wallet.models import Wallet, WalletTransaction
+from apps.wallet.models import Wallet, WalletTransaction
 from rest_framework import serializers
 
 
