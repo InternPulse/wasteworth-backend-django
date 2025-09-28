@@ -73,7 +73,7 @@ POST /users/login/
 POST /users/forgotPassword/
 
 # Step 2: Verify OTP and set new password
-POST /otp/verify/?action=reset
+POST /users/resetPassword/
 ```
 
 ### 3. Update Profile (Sensitive Fields)
@@ -427,21 +427,22 @@ Sends OTP to email for password reset.
 {
     "success": true,
     "message": "If the email exists, password reset instructions will be sent.",
-    "next_step": "Use POST /api/v1/otp/verify/?action=reset with email, otp, and new_password"
+    "next_step": "Use POST /api/v1/users/resetPassword/ with email, otp, and new_password"
 }
 ```
 
 #### 8. Reset Password (Verify OTP + Set New Password)
-**POST** `/otp/verify/?action=reset`
+**POST** `/users/resetPassword/`
 
 Verifies OTP and resets password in one step.
 
 **Request Body:**
 ```json
 {
-    "email_or_phone": "user@example.com",
+    "email": "user@example.com",
     "otp": "123456",
-    "new_password": "NewStrongPass123!"
+    "new_password": "NewStrongPass123!",
+    "confirm_password": "NewStrongPass123!"
 }
 ```
 
@@ -449,17 +450,50 @@ Verifies OTP and resets password in one step.
 ```json
 {
     "success": true,
-    "message": "Password reset successful",
-    "user": {
-        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
-        "name": "John Doe",
-        "email": "user@example.com",
-        "phone": "+1234567890",
-        "role": "disposer",
-        "address_location": null,
-        "wallet_balance": "150.00",
-        "referral_code": "ABC123DEF",
-        "created_at": "2025-01-15T10:30:00Z"
+    "message": "Password reset successfully."
+}
+```
+
+**Error Responses:**
+
+**Invalid OTP (400):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "INVALID_OTP",
+        "message": "The OTP provided is invalid or has expired.",
+        "details": {
+            "otp": ["Invalid or expired OTP code."]
+        }
+    }
+}
+```
+
+**User Not Found (400):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "USER_NOT_FOUND",
+        "message": "No user found with the provided email address.",
+        "details": {
+            "email": ["User with this email does not exist."]
+        }
+    }
+}
+```
+
+**Passwords Don't Match (400):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "PASSWORD_MISMATCH",
+        "message": "The provided passwords do not match.",
+        "details": {
+            "confirm_password": ["Passwords do not match."]
+        }
     }
 }
 ```
@@ -677,13 +711,14 @@ await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/forgotP
 });
 
 // 2. Reset with OTP
-await fetch('https://wasteworth-backend-django.onrender.com/api/v1/otp/verify/?action=reset', {
+await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/resetPassword/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-        email_or_phone: 'user@example.com',
+        email: 'user@example.com',
         otp: '123456',
-        new_password: 'NewPassword123!'
+        new_password: 'NewPassword123!',
+        confirm_password: 'NewPassword123!'
     })
 });
 ```
