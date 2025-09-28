@@ -597,91 +597,334 @@ class OTPPasswordResetTestCase(APITestCase):
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password('NewPassword123!'))
 
-    # def test_reset_password_expired_token(self):
-        """Test reset password with expired token"""
-        # Generate expired token
-        exp = datetime.utcnow() - timedelta(hours=1)  # 1 hour ago
-        expired_payload = {
-            "user_id": str(self.user.id),
-            "exp": exp.timestamp(),
-        }
-        expired_token = jwt.encode(expired_payload, settings.SECRET_KEY, algorithm="HS256")
-        if isinstance(expired_token, bytes):
-            expired_token = expired_token.decode("utf-8")
 
-        url = f'/api/v1/users/resetPassword/{expired_token}/'
-        data = {
-            'password': 'NewStrongPass123#',
-            'password_confirm': 'NewStrongPass123#'
-        }
-        response = self.client.patch(url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['detail'], 'Reset token has expired.')
+class ResetPasswordTestCase(APITestCase):
+    """
+    Comprehensive tests for the new standalone reset password endpoint.
+    Tests the clean flow: forgotPassword → resetPassword
+    """
+    def setUp(self):
+        self.user = User.objects.create_user(
+            name='Reset User',
+            email='resetuser@example.com',
+            password='OldPassword123!',
+            phone='+1234567890'
+        )
+        self.forgot_password_url = '/api/v1/users/forgotPassword/'
+        self.reset_password_url = '/api/v1/users/resetPassword/'
 
-    def test_reset_password_invalid_token(self):
-        """Test reset password with invalid token"""
-        invalid_token = 'invalid-token-string'
-        url = f'/api/v1/users/resetPassword/{invalid_token}/'
-        data = {
-            'password': 'NewStrongPass123#',
-            'password_confirm': 'NewStrongPass123#'
-        }
-        response = self.client.patch(url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['detail'], 'Invalid reset token.')
+    @patch('utils.tasks.queue_otp_email')
+    def test_resetpassword_complete_flow_success(self, mock_queue):
+        """Test successful complete reset password flow"""
+        from unittest.mock import MagicMock
+        mock_queue.return_value = MagicMock(id='test-job-id')
 
-    def test_reset_password_user_not_found(self):
-        """Test reset password with token for non-existent user"""
-        # Generate token for non-existent user
-        exp = datetime.utcnow() + timedelta(hours=1)
-        payload = {
-            "user_id": "99999999-9999-4999-9999-999999999999",  # Non-existent UUID string
-            "exp": exp.timestamp(),
-        }
-        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
-        if isinstance(token, bytes):
-            token = token.decode("utf-8")
+        # Step 1: Request password reset (generates OTP)
+        forgot_data = {'email': 'resetuser@example.com'}
+        forgot_response = self.client.post(self.forgot_password_url, forgot_data, format='json')
 
-        url = f'/api/v1/users/resetPassword/{token}/'
-        data = {
-            'password': 'NewStrongPass123#',
-            'password_confirm': 'NewStrongPass123#'
+        self.assertEqual(forgot_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(forgot_response.data['success'])
+        self.assertIn('password reset instructions will be sent', forgot_response.data['message'])
+
+        # Step 2: Create a valid OTP for testing
+        from apps.otp.models import OTP
+        from django.contrib.auth.hashers import make_password
+        from django.utils import timezone
+        from datetime import timedelta
+
+        otp_code = '123456'
+        otp_instance = OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password(otp_code),
+            purpose='reset',
+            is_used=False,
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        # Step 3: Reset password using OTP
+        reset_data = {
+            'email': 'resetuser@example.com',
+            'otp': otp_code,
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
         }
-        response = self.client.patch(url, data, format='json')
+        reset_response = self.client.post(self.reset_password_url, reset_data, format='json')
+
+        self.assertEqual(reset_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(reset_response.data['success'])
+        self.assertIn('Password reset successful', reset_response.data['message'])
+
+        # Step 4: Verify password was actually changed
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('NewSecurePass123!'))
+        self.assertFalse(self.user.check_password('OldPassword123!'))
+
+        # Step 5: Verify OTP was marked as used
+        otp_instance.refresh_from_db()
+        self.assertTrue(otp_instance.is_used)
+
+    def test_resetpassword_invalid_email(self):
+        """Test reset password with non-existent email"""
+        reset_data = {
+            'email': 'nonexistent@example.com',
+            'otp': '123456',
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }
+        response = self.client.post(self.reset_password_url, reset_data, format='json')
+
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data['detail'], 'User not found.')
+        self.assertFalse(response.data['success'])
+        self.assertIn('User not found', response.data['error'])
 
-    def test_reset_password_password_mismatch(self):
-        """Test reset password with mismatched passwords"""
-        data = {
-            'password': 'NewStrongPass123#',
-            'password_confirm': 'DifferentPass123#'
-        }
-        response = self.client.patch(self.reset_password_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        error_details = response.data['error']['details']
-        self.assertTrue('password' in error_details or 'password_confirm' in error_details or 'non_field_errors' in error_details)
+    def test_resetpassword_invalid_otp(self):
+        """Test reset password with invalid OTP"""
+        # Create valid OTP but use wrong code
+        from apps.otp.models import OTP
+        from django.contrib.auth.hashers import make_password
+        from django.utils import timezone
+        from datetime import timedelta
 
-    def test_reset_password_weak_password(self):
-        """Test reset password with weak password"""
-        data = {
-            'password': 'weak',
-            'password_confirm': 'weak'
+        OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password('123456'),
+            purpose='reset',
+            is_used=False,
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        reset_data = {
+            'email': 'resetuser@example.com',
+            'otp': '654321',  # Wrong OTP
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
         }
-        response = self.client.patch(self.reset_password_url, data, format='json')
+        response = self.client.post(self.reset_password_url, reset_data, format='json')
+
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        # With consistent error handling, always expect custom format
+        self.assertFalse(response.data['success'])
+        self.assertIn('Invalid or expired OTP', response.data['error'])
+
+    def test_resetpassword_expired_otp(self):
+        """Test reset password with expired OTP"""
+        from apps.otp.models import OTP
+        from django.contrib.auth.hashers import make_password
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # Create expired OTP
+        otp_code = '123456'
+        OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password(otp_code),
+            purpose='reset',
+            is_used=False,
+            expires_at=timezone.now() - timedelta(minutes=5)  # Expired 5 minutes ago
+        )
+
+        reset_data = {
+            'email': 'resetuser@example.com',
+            'otp': otp_code,
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }
+        response = self.client.post(self.reset_password_url, reset_data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data['success'])
+        self.assertIn('Invalid or expired OTP', response.data['error'])
+
+    def test_resetpassword_used_otp(self):
+        """Test reset password with already used OTP"""
+        from apps.otp.models import OTP
+        from django.contrib.auth.hashers import make_password
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # Create used OTP
+        otp_code = '123456'
+        OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password(otp_code),
+            purpose='reset',
+            is_used=True,  # Already used
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        reset_data = {
+            'email': 'resetuser@example.com',
+            'otp': otp_code,
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }
+        response = self.client.post(self.reset_password_url, reset_data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data['success'])
+        self.assertIn('Invalid or expired OTP', response.data['error'])
+
+    def test_resetpassword_wrong_purpose_otp(self):
+        """Test reset password with OTP generated for different purpose"""
+        from apps.otp.models import OTP
+        from django.contrib.auth.hashers import make_password
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # Create OTP for signup instead of reset
+        otp_code = '123456'
+        OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password(otp_code),
+            purpose='signup',  # Wrong purpose
+            is_used=False,
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        reset_data = {
+            'email': 'resetuser@example.com',
+            'otp': otp_code,
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }
+        response = self.client.post(self.reset_password_url, reset_data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data['success'])
+        self.assertIn('Invalid or expired OTP', response.data['error'])
+
+    def test_resetpassword_mismatched_passwords(self):
+        """Test reset password with mismatched password confirmation"""
+        reset_data = {
+            'email': 'resetuser@example.com',
+            'otp': '123456',
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'DifferentPassword123!'  # Mismatch
+        }
+        response = self.client.post(self.reset_password_url, reset_data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('error', response.data)
         self.assertFalse(response.data['success'])
-        self.assertIn('password', response.data['error']['details'])
-
-    def test_reset_password_missing_fields(self):
-        """Test reset password with missing required fields"""
-        data = {}
-        response = self.client.patch(self.reset_password_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Check that password mismatch error is in the details
         error_details = response.data['error']['details']
-        self.assertTrue('password' in error_details or 'password_confirm' in error_details)
+        self.assertTrue('confirm_password' in error_details or 'non_field_errors' in error_details)
+
+    def test_resetpassword_weak_password(self):
+        """Test reset password with weak password"""
+        reset_data = {
+            'email': 'resetuser@example.com',
+            'otp': '123456',
+            'new_password': 'weak',  # Too weak
+            'confirm_password': 'weak'
+        }
+        response = self.client.post(self.reset_password_url, reset_data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+        self.assertFalse(response.data['success'])
+        error_details = response.data['error']['details']
+        self.assertIn('new_password', error_details)
+
+    def test_resetpassword_missing_fields(self):
+        """Test reset password with missing required fields"""
+        test_cases = [
+            {}, # All fields missing
+            {'email': 'resetuser@example.com'}, # Missing OTP and passwords
+            {'email': 'resetuser@example.com', 'otp': '123456'}, # Missing passwords
+            {'email': 'resetuser@example.com', 'otp': '123456', 'new_password': 'NewPass123!'}, # Missing confirm_password
+        ]
+
+        for data in test_cases:
+            with self.subTest(data=data):
+                response = self.client.post(self.reset_password_url, data, format='json')
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn('error', response.data)
+                self.assertFalse(response.data['success'])
+
+    def test_resetpassword_invalid_email_format(self):
+        """Test reset password with invalid email format"""
+        reset_data = {
+            'email': 'invalid-email-format',
+            'otp': '123456',
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }
+        response = self.client.post(self.reset_password_url, reset_data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+        self.assertFalse(response.data['success'])
+        error_details = response.data['error']['details']
+        self.assertIn('email', error_details)
+
+    def test_resetpassword_invalid_otp_format(self):
+        """Test reset password with invalid OTP format"""
+        test_cases = [
+            '12345',  # Too short
+            '1234567',  # Too long
+            'abcdef',  # Non-numeric
+            '',  # Empty
+        ]
+
+        for otp in test_cases:
+            with self.subTest(otp=otp):
+                reset_data = {
+                    'email': 'resetuser@example.com',
+                    'otp': otp,
+                    'new_password': 'NewSecurePass123!',
+                    'confirm_password': 'NewSecurePass123!'
+                }
+                response = self.client.post(self.reset_password_url, reset_data, format='json')
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn('error', response.data)
+                self.assertFalse(response.data['success'])
+
+    @patch('utils.tasks.queue_otp_email')
+    def test_resetpassword_invalidates_existing_tokens(self, mock_queue):
+        """Test that password reset invalidates all existing user tokens"""
+        from unittest.mock import MagicMock
+        from rest_framework_simplejwt.tokens import RefreshToken
+        mock_queue.return_value = MagicMock(id='test-job-id')
+
+        # Create tokens for the user
+        refresh = RefreshToken.for_user(self.user)
+        access_token = str(refresh.access_token)
+
+        # Verify tokens work before reset
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + access_token)
+        auth_response = self.client.get('/api/v1/wallet/balance/')
+        self.assertEqual(auth_response.status_code, status.HTTP_200_OK)
+
+        # Perform password reset
+        from apps.otp.models import OTP
+        from django.contrib.auth.hashers import make_password
+        from django.utils import timezone
+        from datetime import timedelta
+
+        otp_code = '123456'
+        OTP.objects.create(
+            user_id=self.user,
+            hashed_otp=make_password(otp_code),
+            purpose='reset',
+            is_used=False,
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        reset_data = {
+            'email': 'resetuser@example.com',
+            'otp': otp_code,
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }
+        reset_response = self.client.post(self.reset_password_url, reset_data, format='json')
+        self.assertEqual(reset_response.status_code, status.HTTP_200_OK)
+
+        # Verify old tokens are now invalid (should return 401)
+        auth_response_after = self.client.get('/api/v1/wallet/balance/')
+        self.assertEqual(auth_response_after.status_code, status.HTTP_401_UNAUTHORIZED)
+
 
 
 class UpdatePasswordTestCase(APITestCase):
