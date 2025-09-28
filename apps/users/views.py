@@ -166,7 +166,7 @@ class ForgotPasswordView(generics.GenericAPIView):
             return Response({
                 "success": True,
                 "message": "If the email exists, password reset instructions will be sent.",
-                "next_step": "Use POST /api/v1/otp/verify/?action=reset with email, otp, and new_password"
+                "next_step": "Use POST /api/v1/users/resetPassword/ with email, otp, new_password, and confirm_password"
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -368,3 +368,91 @@ class UpdateUserView(generics.GenericAPIView):
                 'message': 'Profile updated successfully',
                 'data': UserProfileSerializer(user).data
             }, status=status.HTTP_200_OK)
+
+
+# POST /api/v1/users/resetPassword/
+class ResetPasswordView(generics.GenericAPIView):
+    """
+    Reset user password using email + OTP + new password.
+    This is a clean, one-step password reset that replaces the old JWT-based approach.
+    """
+    serializer_class = ResetPasswordSerializer
+    permission_classes = []  # No authentication required
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email']
+        otp_code = serializer.validated_data['otp']
+        new_password = serializer.validated_data['new_password']
+
+        try:
+            # 1. Find user by email
+            user = User.objects.get(email=email)
+
+            # 2. Verify OTP internally
+            from apps.otp.models import OTP
+            from django.utils import timezone
+            from django.contrib.auth.hashers import check_password
+
+            otp_obj = OTP.objects.filter(
+                user_id=user,
+                purpose='reset',
+                used=False,
+                expires_at__gt=timezone.now()
+            ).first()
+
+            if not otp_obj or not check_password(otp_code, otp_obj.hashed_otp):
+                return Response({
+                    'success': False,
+                    'error': {
+                        'code': 'INVALID_OTP',
+                        'message': 'The OTP provided is invalid or has expired.',
+                        'details': {'otp': ['Invalid or expired OTP code.']}
+                    }
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # 3. Reset password
+            user.set_password(new_password)
+            user.save()
+
+            # 4. Mark OTP as used
+            otp_obj.used = True
+            otp_obj.save()
+
+            # 5. Invalidate all existing tokens for security
+            try:
+                from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+                tokens = OutstandingToken.objects.filter(user=user)
+                for token in tokens:
+                    token.blacklist()
+            except Exception as e:
+                # Token blacklisting is not critical, just log the error
+                logger.warning(f"Failed to blacklist tokens for user {user.email}: {str(e)}")
+
+            logger.info(f"Password reset successful for user {user.email}")
+            return Response({
+                'success': True,
+                'message': 'Password reset successful. Please login with your new password.'
+            }, status=status.HTTP_200_OK)
+
+        except User.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': {
+                    'code': 'USER_NOT_FOUND',
+                    'message': 'No account found with the provided email address.',
+                    'details': {'email': ['User with this email does not exist.']}
+                }
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Password reset failed for {email}: {str(e)}")
+            return Response({
+                'success': False,
+                'error': {
+                    'code': ErrorCodes.SERVER_ERROR,
+                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
+                    'details': {'error': ['Password reset failed. Please try again.']}
+                }
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

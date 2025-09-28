@@ -62,11 +62,11 @@ def send_otp(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_otp(request):
-    """Verify OTP for different actions ( signup, reset, update)"""
+    """Verify OTP for different actions (signup, update)"""
     action = request.query_params.get('action')
 
-    # Validate action parameter
-    valid_actions = ['signup', 'reset', 'update']
+    # Validate action parameter (removed 'reset' from valid actions)
+    valid_actions = ['signup', 'update']
     if not action or action not in valid_actions:
         return Response({
             'success': False,
@@ -93,41 +93,15 @@ def verify_otp(request):
     otp_obj.used = True
     otp_obj.save()
 
-    # Handle password reset if action is 'reset'
-    if action == 'reset':
-        new_password = request.data.get('new_password')
-        if not new_password:
-            return Response({
-                'success': False,
-                'error': 'new_password is required for password reset'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate password length
-        if len(new_password) < 8:
-            return Response({
-                'success': False,
-                'error': 'Password must be at least 8 characters long'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Set new password
-        user.set_password(new_password)
-        user.save()
-
-        return Response({
-            'success': True,
-            'message': 'Password reset successful',
-            'user': UserProfileSerializer(user).data
-        }, status=status.HTTP_200_OK)
-
-    # Handle other actions (signup) - RETURN TOKENS
-    # Mark user as verified for signup action
-    if action in ['signup']:
+    # Handle signup action - Mark user as verified and return tokens
+    if action == 'signup':
         user.is_verified = True
         user.save()
 
     refresh = RefreshToken.for_user(user)
     action_messages = {
-        'signup': 'Account verification successful'
+        'signup': 'Account verification successful',
+        'update': 'OTP verification successful'
     }
 
     return Response({
