@@ -44,7 +44,7 @@ def send_otp(request):
 
         return Response({
             'success': True,
-            'message': 'OTP sent successfully',
+            'message': 'OTP sent successfully. If you don\'t see it in your inbox, please check your spam folder.',
             'otp_id': str(otp_result['otp_instance'].id),
             'expires_at': otp_result['otp_instance'].expires_at
         }, status=status.HTTP_200_OK)
@@ -144,7 +144,7 @@ def resend_otp(request):
 
         return Response({
             'success': True,
-            'message': 'New OTP sent successfully',
+            'message': 'New OTP sent successfully. If you don\'t see it in your inbox, please check your spam folder.',
             'otp_id': str(otp_result['otp_instance'].id)
         }, status=status.HTTP_200_OK)
 
@@ -157,53 +157,3 @@ def resend_otp(request):
             'error': 'Failed to send OTP. Please try again.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def request_password_reset(request):
-    """Request password reset OTP"""
-    email_or_phone = request.data.get('email_or_phone')
-
-    if not email_or_phone:
-        return Response({
-            'success': False,
-            'error': 'email_or_phone is required'
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        # Detect if input is email or phone
-        if '@' in email_or_phone:
-            user = User.objects.get(email=email_or_phone)
-        else:
-            user = User.objects.get(phone=email_or_phone)
-
-        # Generate and send OTP for password reset
-        otp_result = generate_and_send_otp(user, purpose='reset')
-
-        # Check if OTP sending was successful
-        if not otp_result.get('success', False):
-            logger.error(f"Password reset OTP sending failed for user {email_or_phone}: {otp_result.get('error', 'Unknown error')}")
-            return Response({
-                'success': False,
-                'error': 'Failed to send OTP. Please try again.'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({
-            'success': True,
-            'message': 'OTP for password reset sent'
-        }, status=status.HTTP_200_OK)
-
-    except User.DoesNotExist:
-        # In development, be explicit about user not found
-        # In production, return generic message to avoid user enumeration
-        if settings.DEBUG:
-            return Response({
-                'success': False,
-                'error': 'No user found with this email or phone'
-            }, status=status.HTTP_404_NOT_FOUND)
-        else:
-            # Return success message to avoid user enumeration in production
-            return Response({
-                'success': True,
-                'message': 'OTP for password reset sent'
-            }, status=status.HTTP_200_OK)
