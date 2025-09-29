@@ -373,7 +373,7 @@ Updates user profile. **Sensitive fields** (email, phone, role) require OTP veri
 ```json
 {
     "success": true,
-    "message": "Profile update requires verification. OTP sent to your email.",
+    "message": "Profile update requires verification. OTP is being sent to your email.",
     "otp_id": "abc-123-def-456",
     "next_step": "Provide the same data along with the OTP to complete the update"
 }
@@ -513,7 +513,7 @@ Verifies OTP and resets password in one step.
 ```json
 {
     "success": true,
-    "message": "OTP sent to your email. Please provide OTP and new_password to complete password update.",
+    "message": "OTP is being sent to your email. Please provide OTP and new_password to complete password update.",
     "otp_id": "abc-123-def-456"
 }
 ```
@@ -559,7 +559,7 @@ Manually send OTP for any purpose.
 ```json
 {
     "success": true,
-    "message": "OTP sent successfully",
+    "message": "OTP sent successfully. If you don't see it in your inbox, please check your spam folder.",
     "otp_id": "abc-123-def-456",
     "expires_at": "2025-01-15T10:40:00Z"
 }
@@ -582,32 +582,11 @@ Resends OTP and invalidates previous ones.
 ```json
 {
     "success": true,
-    "message": "New OTP sent successfully",
+    "message": "New OTP sent successfully. If you don't see it in your inbox, please check your spam folder.",
     "otp_id": "xyz-789-abc-123"
 }
 ```
 
-#### 12. Request Password Reset (OTP Method)
-**POST** `/otp/request-password-reset/`
-
-Alternative method to request password reset OTP. More direct than `/users/forgotPassword/`.
-
-**Request Body:**
-```json
-{
-    "email_or_phone": "user@example.com"
-}
-```
-
-**Success Response (200):**
-```json
-{
-    "success": true,
-    "message": "OTP for password reset sent"
-}
-```
-
-**Note:** This endpoint provides the same functionality as `/users/forgotPassword/` but is more direct and part of the OTP module.
 
 ---
 
