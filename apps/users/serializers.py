@@ -99,15 +99,50 @@ class ForgotPasswordSerializer(serializers.Serializer):
 
 
 class ResetPasswordSerializer(serializers.Serializer):
-    password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password]
-    )
-    password_confirm = serializers.CharField(write_only=True, required=True)
+    """
+    Serializer for password reset using email + OTP + new password.
+    This replaces the old JWT-based reset with a cleaner OTP-based approach.
+    """
+    email = serializers.EmailField(required=True)
+    otp = serializers.CharField(max_length=6, min_length=6, required=True)
+    new_password = serializers.CharField(write_only=True, required=True)
+    confirm_password = serializers.CharField(write_only=True, required=True)
 
-    def validate(self, attrs):
-        if attrs["password"] != attrs["password_confirm"]:
-            raise serializers.ValidationError({"password": "Password fields didn't match."})
-        return attrs
+    def validate_new_password(self, value):
+        """Comprehensive password validation with detailed feedback"""
+        errors = []
+
+        # Length check
+        if len(value) < 8:
+            errors.append("Password must be at least 8 characters long")
+
+        # Character requirements
+        if not re.search(r'[A-Z]', value):
+            errors.append("Password must contain at least one uppercase letter")
+        if not re.search(r'[a-z]', value):
+            errors.append("Password must contain at least one lowercase letter")
+        if not re.search(r'\d', value):
+            errors.append("Password must contain at least one number")
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
+            errors.append("Password must contain at least one special character")
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return value
+
+    def validate_otp(self, value):
+        """Validate OTP format"""
+        if not value.isdigit():
+            raise serializers.ValidationError("OTP must contain only numbers")
+        return value
+
+    def validate(self, data):
+        """Validate password confirmation match"""
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError({
+                'confirm_password': 'Passwords do not match.'
+            })
+        return data
 
 
 class UpdatePasswordSerializer(serializers.Serializer):
