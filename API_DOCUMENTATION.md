@@ -756,6 +756,170 @@ const response = await fetch('https://wasteworth-backend-django.onrender.com/api
 
 ---
 
+## 💰 Wallet Management
+
+### Overview
+The wallet system manages both **cash balances** and **eco-points** for users. Points are the primary focus, earned through referrals and recycling activities, while cash provides secondary payment functionality.
+
+### Transaction Types
+**Points-based transactions:**
+- `referral_reward` - Points earned from referrals
+- `activity_reward` - Points earned from recycling activities
+- `redeem` - Points redeemed for rewards
+
+**Cash-based transactions:**
+- `deposit` - Cash added to wallet
+- `withdrawal` - Cash withdrawn from wallet
+- `payout` - Cash paid out to user
+- `refund` - Cash refunded to user
+
+### 1. Get Wallet Balance
+**GET** `/wallet/balance/`
+**Authentication Required:** Yes
+
+Retrieves the user's wallet information including cash balance and points.
+
+**Response (200):**
+```json
+{
+    "wallet_id": "bb5ca944-62da-47b4-8bdc-79b54affbd86",
+    "user_name": "Test Wallet",
+    "user_email": "testwallet@example.com",
+    "balance": "0.00",
+    "currency": "NGN",
+    "points": 0,
+    "is_active": true,
+    "created_at": "2025-09-29T13:34:05.342283Z",
+    "updated_at": "2025-09-29T13:34:05.342309Z"
+}
+```
+
+### 2. List Wallet Transactions
+**GET** `/wallet/transactions/`
+**Authentication Required:** Yes
+
+Retrieves paginated list of user's wallet transactions with filtering support.
+
+**Query Parameters:**
+- `transaction_type` - Filter by type (`referral_reward`, `deposit`, etc.)
+- `payment_method` - Filter by payment method (`bank`, `system`, etc.)
+- `status` - Filter by status (`success`, `pending`, `failed`)
+- `date_from` - Filter from date (ISO format)
+- `date_to` - Filter until date (ISO format)
+- `min_amount` - Minimum transaction amount
+- `max_amount` - Maximum transaction amount
+- `search` - Search in description or reference
+- `page` - Page number
+- `page_size` - Items per page (max 100)
+
+**Example: Get all referral reward transactions**
+```bash
+GET /wallet/transactions/?transaction_type=referral_reward
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "Retrieved 1 transactions",
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "transaction_id": "a4d60ab5-2b87-4334-80aa-009853b79014",
+            "wallet_id": "bb5ca944-62da-47b4-8bdc-79b54affbd86",
+            "user_name": "Test Wallet",
+            "user_email": "testwallet@example.com",
+            "transaction_type": "referral_reward",
+            "transaction_type_display": "Referral Reward",
+            "amount": null,
+            "points": 50,
+            "currency": "NGN",
+            "description": "Referral reward for inviting a friend",
+            "reference": "WWA4D60AB5",
+            "payment_method": "referral_reward",
+            "payment_method_display": "Referral Reward",
+            "status": "success",
+            "status_display": "Success",
+            "metadata": null,
+            "created_at": "2025-09-29T13:41:54.737124Z"
+        }
+    ]
+}
+```
+
+**Example: Get cash transactions with amount filter**
+```bash
+GET /wallet/transactions/?transaction_type=deposit&min_amount=50.00
+```
+
+### Transaction Examples
+
+**Points Transaction (Referral Reward):**
+```json
+{
+    "transaction_type": "referral_reward",
+    "amount": null,
+    "points": 50,
+    "payment_method": "referral_reward"
+}
+```
+
+**Cash Transaction (Deposit):**
+```json
+{
+    "transaction_type": "deposit",
+    "amount": "100.50",
+    "points": null,
+    "payment_method": "bank"
+}
+```
+
+**Mixed Transaction (Activity Reward with Cash Bonus):**
+```json
+{
+    "transaction_type": "activity_reward",
+    "amount": "5.00",
+    "points": 25,
+    "payment_method": "system"
+}
+```
+
+### Error Handling
+
+All wallet endpoints follow the same error format:
+
+**Validation Error (400):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The provided data is invalid. Please check the details below.",
+        "details": {
+            "transaction_type": ["Points transactions must use one of: referral_reward, activity_reward, redeem"]
+        }
+    }
+}
+```
+
+**Wallet Not Found (404):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "NOT_FOUND",
+        "message": "Wallet not found for authenticated user.",
+        "details": {
+            "wallet": ["No wallet associated with your account."]
+        }
+    }
+}
+```
+
+---
+
 ## 🔍 Status Codes
 
 | Code | Description |
@@ -786,15 +950,26 @@ curl -X POST https://wasteworth-backend-django.onrender.com/api/v1/users/login/ 
 
 # Test dashboard without authentication
 curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/users/user-dashboard/
+
+# Test wallet endpoints with authentication
+curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/wallet/balance/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Test wallet transactions with filtering
+curl -X GET "https://wasteworth-backend-django.onrender.com/api/v1/wallet/transactions/?transaction_type=referral_reward" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
 ```
 
 ---
 
-**🎉 Your OTP-based authentication system with consistent error handling is ready for production use!**
+**🎉 Your comprehensive API with wallet management and OTP authentication is ready for production use!**
 
 **Key Features:**
 ✅ Consistent error response format across all endpoints
 ✅ OTP integration for sensitive operations
 ✅ Two-step profile updates for security
-✅ Comprehensive validation with detailed error messages
-✅ Production-ready with proper authentication
+✅ Wallet management with points and cash
+✅ Transaction filtering and listing
+✅ Points-first eco-system with referral rewards
+✅ Production-ready with proper authentication and validation

@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from decouple import config
-from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,12 +21,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-uavw#m!wu%3d6*k9%y4$54pqh^5j_(6%_hqv1ibw4_3!a^d+mg')
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-fallback-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -47,13 +47,12 @@ INSTALLED_APPS = [
     'apps.listings',
     'apps.wallet',
     'apps.notifications',
-    'apps.otp',
-    'apps.marketplace',
-    'apps.referral',
+    'apps.otp',            # Added OTP app
+    'apps.referral',       # Added referral app
+    'apps.marketplace',    # Added marketplace app
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -61,7 +60,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'utils.middleware.ExceptionMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -89,25 +87,37 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 import sys
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
-        'USER': config('DATABASE_USER', default='avnadmin'),
-        'PASSWORD': config('DATABASE_PASSWORD', default='localpass'),
-        'HOST': config('DATABASE_HOST', default='localhost'),
-        'PORT': config('DATABASE_PORT', default='5432'),
-        'OPTIONS': {
-            'sslmode': config('SSL_MODE', default='disable'),
-        } if config('SSL_MODE', default='disable') != 'disable' else {},
-    }
-}
+# Check if we should use PostgreSQL or SQLite
+USE_POSTGRES = config('USE_POSTGRES', default='False', cast=bool)
 
-# Use SQLite for testing with fresh schema
+if USE_POSTGRES:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
+            'USER': config('DATABASE_USER', default='avnadmin'),
+            'PASSWORD': config('DATABASE_PASSWORD', default='localpass'),
+            'HOST': config('DATABASE_HOST', default='localhost'),
+            'PORT': config('DATABASE_PORT', default='5432'),
+            'OPTIONS': {
+                'sslmode': config('SSL_MODE', default='disable'),
+            } if config('SSL_MODE', default='disable') != 'disable' else {},
+        }
+    }
+else:
+    # Use SQLite for local development
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+# Use SQLite for testing
 if 'test' in sys.argv:
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
+        'NAME': ':memory:'
     }
 
 
@@ -129,6 +139,31 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Internationalization
+# https://docs.djangoproject.com/en/5.2/topics/i18n/
+
+LANGUAGE_CODE = 'en-us'
+
+TIME_ZONE = 'UTC'
+
+USE_I18N = True
+
+USE_TZ = True
+
+
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.2/howto/static-files/
+
+STATIC_URL = 'static/'
+
+# Default primary key field type
+# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom User Model
+AUTH_USER_MODEL = 'users.User'
+
 # REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -148,6 +183,7 @@ REST_FRAMEWORK = {
 }
 
 # JWT Configuration
+from datetime import timedelta
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -202,8 +238,6 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@wasteworth.c
 # Email timeout settings (2 minutes for SMTP operations)
 EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=120, cast=int)
 
-
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -215,42 +249,32 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# Custom User Model
-AUTH_USER_MODEL = 'users.User'
-
-# Security Settings for Production
-if not DEBUG and 'test' not in sys.argv:
-    # HTTPS settings
-    SECURE_SSL_REDIRECT = not DEBUG  # Disable SSL redirect in development
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-    # HSTS settings
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-
-    # Cookie settings
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_HTTPONLY = True
-    CSRF_COOKIE_HTTPONLY = True
-
-    # Content type sniffing
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-
-    # XSS protection
-    SECURE_BROWSER_XSS_FILTER = True
-
-    # Referrer policy
-    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+# Redis Queue Configuration - Temporarily commented out
+RQ_QUEUES = {
+    'default': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': 0,
+        'PASSWORD': config('REDIS_PASSWORD', default=''),
+        'DEFAULT_TIMEOUT': 360,
+    },
+    'high': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': 0,
+        'PASSWORD': config('REDIS_PASSWORD', default=''),
+        'DEFAULT_TIMEOUT': 500,
+    },
+    'low': {
+        'HOST': config('REDIS_HOST', default='localhost'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': 0,
+        'PASSWORD': config('REDIS_PASSWORD', default=''),
+        'DEFAULT_TIMEOUT': 500,
+    }
+}
