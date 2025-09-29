@@ -23,6 +23,7 @@ Authorization: Bearer <access_token>
 ```json
 {
   "success": false,
+  "message": "User-friendly error message for easy frontend display",
   "error": {
     "code": "ERROR_CODE",
     "message": "User-friendly error message",
@@ -32,6 +33,12 @@ Authorization: Bearer <access_token>
   }
 }
 ```
+
+**Key Points:**
+- **Top-level `message`**: Always user-friendly for direct frontend display
+- **`error.message`**: Same user-friendly message for consistency
+- **`error.details`**: Raw field errors preserved for debugging
+- **`error.code`**: Programmatic error handling
 
 **Common Error Codes:**
 - `VALIDATION_ERROR` - Invalid input data
@@ -45,15 +52,18 @@ Authorization: Bearer <access_token>
 
 ## Quick Start Guide
 
-### 1. Sign Up → Verify → Login
+### 1. Sign Up → Send OTP → Verify → Login
 ```bash
-# Step 1: Create account (sends OTP to email)
+# Step 1: Create account (user created but unverified)
 POST /users/signup/
 
-# Step 2: Verify OTP to complete registration
+# Step 2: Send OTP email separately
+POST /otp/send/
+
+# Step 3: Verify OTP to complete registration
 POST /otp/verify/?action=signup
 
-# Step 3: Login normally (no OTP needed)
+# Step 4: Login normally (no OTP needed)
 POST /users/login/
 ```
 
@@ -63,7 +73,7 @@ POST /users/login/
 POST /users/forgotPassword/
 
 # Step 2: Verify OTP and set new password
-POST /otp/verify/?action=reset
+POST /users/resetPassword/
 ```
 
 ### 3. Update Profile (Sensitive Fields)
@@ -84,7 +94,7 @@ PATCH /users/update-user/ (with same data + OTP)
 #### 1. User Signup
 **POST** `/users/signup/`
 
-Creates a new **unverified** user account and sends OTP to email.
+Creates a new **unverified** user account. **OTP must be sent separately** using `/otp/send/`.
 
 **Request Body:**
 ```json
@@ -104,12 +114,11 @@ Creates a new **unverified** user account and sends OTP to email.
 ```json
 {
     "success": true,
-    "message": "Account created successfully. Please verify your email with the OTP sent to complete registration.",
+    "message": "Account created successfully. Use POST /api/v1/otp/send/ to request verification OTP.",
     "user_id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
     "email": "user@example.com",
     "is_verified": false,
-    "otp_sent": true,
-    "next_step": "Verify OTP using POST /api/v1/otp/verify/?action=signup to get access tokens"
+    "next_step": "Send OTP using POST /api/v1/otp/send/ then verify with POST /api/v1/otp/verify/?action=signup"
 }
 ```
 
@@ -364,7 +373,7 @@ Updates user profile. **Sensitive fields** (email, phone, role) require OTP veri
 ```json
 {
     "success": true,
-    "message": "Profile update requires verification. OTP sent to your email.",
+    "message": "Profile update requires verification. OTP is being sent to your email.",
     "otp_id": "abc-123-def-456",
     "next_step": "Provide the same data along with the OTP to complete the update"
 }
@@ -418,21 +427,22 @@ Sends OTP to email for password reset.
 {
     "success": true,
     "message": "If the email exists, password reset instructions will be sent.",
-    "next_step": "Use POST /api/v1/otp/verify/?action=reset with email, otp, and new_password"
+    "next_step": "Use POST /api/v1/users/resetPassword/ with email, otp, and new_password"
 }
 ```
 
 #### 8. Reset Password (Verify OTP + Set New Password)
-**POST** `/otp/verify/?action=reset`
+**POST** `/users/resetPassword/`
 
 Verifies OTP and resets password in one step.
 
 **Request Body:**
 ```json
 {
-    "email_or_phone": "user@example.com",
+    "email": "user@example.com",
     "otp": "123456",
-    "new_password": "NewStrongPass123!"
+    "new_password": "NewStrongPass123!",
+    "confirm_password": "NewStrongPass123!"
 }
 ```
 
@@ -440,17 +450,50 @@ Verifies OTP and resets password in one step.
 ```json
 {
     "success": true,
-    "message": "Password reset successful",
-    "user": {
-        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
-        "name": "John Doe",
-        "email": "user@example.com",
-        "phone": "+1234567890",
-        "role": "disposer",
-        "address_location": null,
-        "wallet_balance": "150.00",
-        "referral_code": "ABC123DEF",
-        "created_at": "2025-01-15T10:30:00Z"
+    "message": "Password reset successfully."
+}
+```
+
+**Error Responses:**
+
+**Invalid OTP (400):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "INVALID_OTP",
+        "message": "The OTP provided is invalid or has expired.",
+        "details": {
+            "otp": ["Invalid or expired OTP code."]
+        }
+    }
+}
+```
+
+**User Not Found (400):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "USER_NOT_FOUND",
+        "message": "No user found with the provided email address.",
+        "details": {
+            "email": ["User with this email does not exist."]
+        }
+    }
+}
+```
+
+**Passwords Don't Match (400):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "PASSWORD_MISMATCH",
+        "message": "The provided passwords do not match.",
+        "details": {
+            "confirm_password": ["Passwords do not match."]
+        }
     }
 }
 ```
@@ -470,7 +513,7 @@ Verifies OTP and resets password in one step.
 ```json
 {
     "success": true,
-    "message": "OTP sent to your email. Please provide OTP and new_password to complete password update.",
+    "message": "OTP is being sent to your email. Please provide OTP and new_password to complete password update.",
     "otp_id": "abc-123-def-456"
 }
 ```
@@ -516,7 +559,7 @@ Manually send OTP for any purpose.
 ```json
 {
     "success": true,
-    "message": "OTP sent successfully",
+    "message": "OTP sent successfully. If you don't see it in your inbox, please check your spam folder.",
     "otp_id": "abc-123-def-456",
     "expires_at": "2025-01-15T10:40:00Z"
 }
@@ -539,10 +582,11 @@ Resends OTP and invalidates previous ones.
 ```json
 {
     "success": true,
-    "message": "New OTP sent successfully",
+    "message": "New OTP sent successfully. If you don't see it in your inbox, please check your spam folder.",
     "otp_id": "xyz-789-abc-123"
 }
 ```
+
 
 ---
 
@@ -555,6 +599,12 @@ Resends OTP and invalidates previous ones.
 - **Purpose validation** (signup OTP ≠ reset OTP ≠ profile_update OTP)
 - **Previous OTP invalidation** on resend
 - **Secure hashing** in database storage
+
+### Email Reliability
+- **120-second timeout** for email operations (vs 30-second default)
+- **Direct email sending** with improved timeout handling
+- **Reduced timeout errors** on deployed environments
+- **Consistent delivery** even under high load
 
 ### Password Requirements
 - **Minimum 8 characters**
@@ -640,13 +690,14 @@ await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/forgotP
 });
 
 // 2. Reset with OTP
-await fetch('https://wasteworth-backend-django.onrender.com/api/v1/otp/verify/?action=reset', {
+await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/resetPassword/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-        email_or_phone: 'user@example.com',
+        email: 'user@example.com',
         otp: '123456',
-        new_password: 'NewPassword123!'
+        new_password: 'NewPassword123!',
+        confirm_password: 'NewPassword123!'
     })
 });
 ```

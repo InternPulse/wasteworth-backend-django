@@ -38,47 +38,65 @@ Error Response (400):
 
 Frontend Action:
 
-Use the reset_token to build a password reset link, e.g.
-https://your-frontend.com/reset-password/<reset_token>
-Send this link to the user via email.
+The forgot password endpoint sends an OTP to the user's email.
+Use POST /users/resetPassword/ with the user's email, OTP, and new password to complete the reset.
 
 
 2. Reset Password
-PATCH /users/resetPassword/<resetToken>/
+POST /users/resetPassword/
 
-Resets the user's password using the JWT reset token.
+Resets the user's password using OTP verification.
 
 Request Body:
 {
-    "password": "newsecurepassword123",
-    "password_confirm": "newsecurepassword123"
+    "email": "user@example.com",
+    "otp": "123456",
+    "new_password": "newsecurepassword123",
+    "confirm_password": "newsecurepassword123"
 }
 
 Success Response (200):
 {
-    "detail": "Password has been reset successfully."
+    "success": true,
+    "message": "Password reset successfully."
 }
 
 Error Responses:
 
-##Expired token:
+##Invalid OTP:
 {
-    "detail": "Reset token has expired."
-}
-
-##Invalid token:
-{
-    "detail": "Invalid reset token."
+    "success": false,
+    "error": {
+        "code": "INVALID_OTP",
+        "message": "The OTP provided is invalid or has expired.",
+        "details": {
+            "otp": ["Invalid or expired OTP code."]
+        }
+    }
 }
 
 ##User not found:
 {
-    "detail": "User not found."
+    "success": false,
+    "error": {
+        "code": "USER_NOT_FOUND",
+        "message": "No user found with the provided email address.",
+        "details": {
+            "email": ["User with this email does not exist."]
+        }
+    }
 }
 
 ##Passwords don't match:
 {
-    "password": "Password fields didn't match."
+    "success": false,
+    "error": {
+        "code": "PASSWORD_MISMATCH",
+        "message": "The provided passwords do not match.",
+        "details": {
+            "confirm_password": ["Passwords do not match."]
+        }
+    }
 }
 
 
