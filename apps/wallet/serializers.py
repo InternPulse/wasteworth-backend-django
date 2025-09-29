@@ -10,7 +10,7 @@ class WalletSerializer(serializers.ModelSerializer):
     Serializer for wallet balance and basic wallet information.
     Follows the same read-only pattern as UserProfileSerializer.
     """
-    wallet_id = serializers.UUIDField(source='wallet_id', read_only=True)
+    wallet_id = serializers.UUIDField(read_only=True)
     user_name = serializers.CharField(source='user.name', read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True)
     
@@ -31,7 +31,7 @@ class TransactionSerializer(serializers.ModelSerializer):
     Serializer for wallet transactions with detailed information.
     Supports both read and write operations following project patterns.
     """
-    transaction_id = serializers.UUIDField(source='transaction_id', read_only=True)
+    transaction_id = serializers.UUIDField(read_only=True)
     wallet_id = serializers.UUIDField(source='wallet.wallet_id', read_only=True)
     user_name = serializers.CharField(source='user.name', read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True)
@@ -57,29 +57,57 @@ class TransactionSerializer(serializers.ModelSerializer):
     def validate(self, data):
         """
         Custom validation following the project's validation patterns.
-        Similar to UserSignupSerializer and other existing serializers.
+        Handles both cash (amount) and points transactions with proper validation.
         """
         transaction_type = data.get('transaction_type')
         amount = data.get('amount')
         points = data.get('points')
-        
+
         # Ensure either amount or points is provided
         if not amount and not points:
             raise serializers.ValidationError({
-                'amount': ['Either amount or points must be provided for the transaction.']
+                'transaction': ['Either amount or points must be provided for the transaction.']
             })
-        
-        # Validate transaction type specific rules
-        if transaction_type in ['debit', 'withdrawal', 'payout'] and amount and amount <= 0:
+
+        # Validate amount-based transactions (cash)
+        if amount is not None:
+            if amount <= 0:
+                raise serializers.ValidationError({
+                    'amount': ['Amount must be positive for cash transactions.']
+                })
+
+        # Validate points-based transactions
+        if points is not None:
+            if points <= 0:
+                raise serializers.ValidationError({
+                    'points': ['Points must be positive for points transactions.']
+                })
+
+            # Points transactions should use specific transaction types
+            points_transaction_types = ['referral_reward', 'activity_reward', 'redeem']
+            if transaction_type not in points_transaction_types:
+                raise serializers.ValidationError({
+                    'transaction_type': [f'Points transactions must use one of: {", ".join(points_transaction_types)}']
+                })
+
+        # Validate specific transaction type rules
+        if transaction_type in ['referral_reward', 'activity_reward'] and not points:
             raise serializers.ValidationError({
-                'amount': ['Amount must be positive for debit transactions.']
+                'points': ['Reward transactions must include points.']
             })
-        
-        if transaction_type in ['credit', 'deposit', 'referral_reward'] and amount and amount <= 0:
+
+        if transaction_type == 'redeem' and not points:
             raise serializers.ValidationError({
-                'amount': ['Amount must be positive for credit transactions.']
+                'points': ['Redeem transactions must include points to redeem.']
             })
-        
+
+        # Cash-only transaction types
+        cash_only_types = ['deposit', 'withdrawal', 'payout', 'refund']
+        if transaction_type in cash_only_types and not amount:
+            raise serializers.ValidationError({
+                'amount': [f'{transaction_type.title()} transactions must include a cash amount.']
+            })
+
         return data
 
 
@@ -97,28 +125,62 @@ class TransactionCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
-        """Validation for transaction creation"""
+        """
+        Validation for transaction creation with proper points handling.
+        Points are the main focus, with cash as secondary.
+        """
         transaction_type = data.get('transaction_type')
         amount = data.get('amount')
         points = data.get('points')
         payment_method = data.get('payment_method')
-        
+
         # Ensure either amount or points is provided
         if not amount and not points:
-            raise serializers.ValidationError(
-                "Either amount or points must be provided for the transaction."
-            )
-        
-        # Validate payment method for amount transactions
-        if amount and not payment_method:
             raise serializers.ValidationError({
-                'payment_method': ['Payment method is required for monetary transactions.']
+                'transaction': ['Either amount or points must be provided for the transaction.']
             })
-        
-        # Points transactions use system credit
-        if points and not amount:
+
+        # Validate points transactions (main focus)
+        if points is not None:
+            if points <= 0:
+                raise serializers.ValidationError({
+                    'points': ['Points must be positive.']
+                })
+
+            # Points transactions should use specific transaction types
+            points_transaction_types = ['referral_reward', 'activity_reward', 'redeem']
+            if transaction_type not in points_transaction_types:
+                raise serializers.ValidationError({
+                    'transaction_type': [f'Points transactions must use one of: {", ".join(points_transaction_types)}']
+                })
+
+            # Points transactions use system payment method
             data['payment_method'] = 'system'
-        
+
+        # Validate cash transactions
+        if amount is not None:
+            if amount <= 0:
+                raise serializers.ValidationError({
+                    'amount': ['Amount must be positive.']
+                })
+
+            # Cash transactions require payment method
+            if not payment_method:
+                raise serializers.ValidationError({
+                    'payment_method': ['Payment method is required for cash transactions.']
+                })
+
+        # Validate transaction type specific requirements
+        if transaction_type in ['referral_reward', 'activity_reward'] and not points:
+            raise serializers.ValidationError({
+                'points': ['Reward transactions must include points.']
+            })
+
+        if transaction_type == 'redeem' and not points:
+            raise serializers.ValidationError({
+                'points': ['Redeem transactions must include points to redeem.']
+            })
+
         return data
 
     def create(self, validated_data):
