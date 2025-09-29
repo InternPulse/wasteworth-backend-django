@@ -53,7 +53,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    # 'corsheaders.middleware.CorsMiddleware',  # Temporarily disabled for debugging
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -224,6 +224,20 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# Additional CORS settings for better compatibility
+CORS_ALLOW_ALL_ORIGINS = False  # Keep security by only allowing specific origins
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Ensure preflight requests are handled properly
+CORS_PREFLIGHT_MAX_AGE = 86400
 
 # Email Backend Configuration
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='utils.email_backend.SMTPBackendWithTimeout')
