@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import ForgotPasswordView, UpdatePasswordView, UserDashboardView, UpdateUserView
+from .views import ForgotPasswordView, ResetPasswordView, UpdatePasswordView, UserDashboardView, UpdateUserView
 
 app_name = 'users'
 
@@ -13,6 +13,7 @@ urlpatterns = [
     
     # Password Management
     path('forgotPassword/', ForgotPasswordView.as_view(), name='forgot_password'),
+    path('resetPassword/', ResetPasswordView.as_view(), name='reset_password'),
     path('updatePassword/', UpdatePasswordView.as_view(), name='update_password'),
 
     # User dashboard management

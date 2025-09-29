@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
-    'django_rq',  
+    'corsheaders',
     'apps.users',
     'apps.listings',
     'apps.wallet',
@@ -139,7 +139,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -170,6 +169,17 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny'
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
+    'TEST_REQUEST_DEFAULT_FORMAT': 'json',
+    'EXCEPTION_HANDLER': 'utils.error_handler.custom_exception_handler',
 }
 
 # JWT Configuration
@@ -179,17 +189,70 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
 }
 
-# Email Configuration - Read from environment
-EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+# CORS Configuration
+# Development origins
+CORS_ALLOWED_ORIGINS_DEV = [
+    "http://localhost:3000",  # React default
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",  # Alternative React port
+    "http://127.0.0.1:3001",
+    "http://localhost:5173",  # Vite default
+    "http://127.0.0.1:5173",
+]
+
+# Production origins (configure via environment variable)
+CORS_ALLOWED_ORIGINS_PROD = config('CORS_ALLOWED_ORIGINS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
+
+# Use production origins if available, otherwise use development origins
+CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_PROD if CORS_ALLOWED_ORIGINS_PROD else CORS_ALLOWED_ORIGINS_DEV
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# Email Backend Configuration
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='utils.email_backend.SMTPBackendWithTimeout')
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_PORT = config('EMAIL_PORT', default=465, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=True, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='emmfatsneh@gmail.com')
+
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@wasteworth.com')
+
+# Email timeout settings (2 minutes for SMTP operations)
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=120, cast=int)
+
+# Internationalization
+# https://docs.djangoproject.com/en/5.2/topics/i18n/
+
+LANGUAGE_CODE = 'en-us'
+
+TIME_ZONE = 'UTC'
+
+USE_I18N = True
+
+USE_TZ = True
+
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.2/howto/static-files/
+
+STATIC_URL = 'static/'
 
 # Redis Queue Configuration - Temporarily commented out
 RQ_QUEUES = {

@@ -7,17 +7,25 @@ from apps.otp.models import OTP
 logger = logging.getLogger(__name__)
 
 
+# OLD Redis/Queue Implementation (commented out)
+# def generate_and_send_otp_old(user, purpose):
+#     """OLD: Generate OTP, save to database, and queue email sending as background task."""
+#     # ... old implementation commented out
+
 def generate_and_send_otp(user, purpose):
     """
-    Generate OTP, save to database, and queue email sending as background task.
+    Generate OTP, save to database, and send email directly using Resend.
 
     Args:
         user: User instance
         purpose: OTP purpose ('signup', 'reset', 'profile_update')
 
     Returns:
-        dict: Contains OTP instance and job information
+        dict: Contains OTP instance and sending status
     """
+    from django.core.mail import send_mail
+    from django.conf import settings
+
     logger.info(f"Generating OTP for user {user.email}, purpose: {purpose}")
 
     # Generate 6-digit zero-padded numeric OTP
@@ -37,34 +45,34 @@ def generate_and_send_otp(user, purpose):
 
     logger.info(f"OTP record created with ID: {otp_instance.id}")
 
-    # Queue email sending as background task
+    # Send email directly (Resend handles async delivery)
     try:
-        from utils.tasks import queue_otp_email
+        subject = f'Your OTP for {purpose.title().replace("_", " ")}'
+        message = f'Your OTP code is: {otp_code}\n\nThis code will expire in 10 minutes.'
+        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@wasteworth.com')
 
-        # Determine priority based on purpose
-        priority_map = {
-            'reset': 'high',          # Password reset is urgent
-            'profile_update': 'low',   # Profile updates are less urgent
-            'signup': 'default',       # Signup is standard priority
-        }
-        priority = priority_map.get(purpose, 'default')
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=from_email,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
 
-        job = queue_otp_email(user, purpose, priority)
-
-        logger.info(f"OTP email queued successfully for {user.email}")
+        logger.info(f"OTP email sent successfully to {user.email}")
 
         return {
             'otp_instance': otp_instance,
-            'job': job,
-            'queued': True,
+            'job': None,  # No job needed with direct sending
+            'queued': True,  # Keep for backward compatibility
             'success': True
         }
 
     except Exception as e:
-        logger.error(f"Failed to queue OTP email for {user.email}: {str(e)}")
+        logger.error(f"Failed to send OTP email to {user.email}: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
 
-        # Return OTP instance even if email queuing fails
-        # This ensures the OTP exists and can be manually resent
         return {
             'otp_instance': otp_instance,
             'job': None,
