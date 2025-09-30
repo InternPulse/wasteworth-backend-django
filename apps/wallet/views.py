@@ -31,7 +31,7 @@ from .serializers import (
     WalletSerializer,
     TransactionSerializer,
     WalletSummarySerializer,
-    TransactionFilterSerializer
+    TransactionFilterSerializer,RedeemPointsSerializer,RedemptionHistorySerializer,RedemptionOptionSerializer
 )
 
 logger = logging.getLogger(__name__)
@@ -68,17 +68,22 @@ class WalletBalanceView(generics.GenericAPIView):
                     'is_active': True
                 }
             )
-            
+
             if created:
                 logger.info(f"Created new wallet for user {request.user.email}")
-            
+
             serializer = self.serializer_class(wallet)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
+            return Response({
+                'success': True,
+                'message': 'Wallet balance retrieved successfully',
+                'wallet': serializer.data
+            }, status=status.HTTP_200_OK)
+
         except Exception as e:
             logger.error(f"Error retrieving wallet for user {request.user.email}: {str(e)}")
             return Response({
                 'success': False,
+                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
                 'error': {
                     'code': ErrorCodes.SERVER_ERROR,
                     'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
@@ -146,12 +151,17 @@ class WalletSummaryView(generics.GenericAPIView):
             }
             
             serializer = self.serializer_class(summary_data)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
+            return Response({
+                'success': True,
+                'message': 'Wallet summary retrieved successfully',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+
         except Exception as e:
             logger.error(f"Error retrieving wallet summary for user {request.user.email}: {str(e)}")
             return Response({
                 'success': False,
+                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
                 'error': {
                     'code': ErrorCodes.SERVER_ERROR,
                     'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
@@ -428,3 +438,67 @@ def wallet_stats(request):
                 'details': {'error': ['Failed to retrieve wallet statistics.']}
             }
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+class RedemptionOptionsView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        options = [
+            {"redemption_type": "airtime", "points": 100},
+            {"redemption_type": "voucher", "points": 200},
+        ]
+        serializer = RedemptionOptionSerializer(options, many=True)
+        return Response({
+            'success': True,
+            'message': 'Redemption options retrieved successfully',
+            'options': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+# 7. POST redeem points
+class RedeemPointsView(generics.GenericAPIView):
+    serializer_class = RedeemPointsSerializer
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        option = serializer.validated_data['option']
+        points = serializer.validated_data['points']
+
+        wallet = request.user.wallet
+        if wallet.points < points:
+            return Response({
+                'success': False,
+                'message': 'You do not have enough points for this redemption',
+                'error': {
+                    'code': 'INSUFFICIENT_POINTS',
+                    'message': 'You do not have enough points for this redemption',
+                    'details': {
+                        'points': [f'Required: {points} points, Available: {wallet.points} points']
+                    }
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Deduct points
+        wallet.points -= points
+        wallet.save()
+
+        # Create a transaction
+        transaction = WalletTransaction.objects.create(
+            wallet=wallet,
+            user=request.user,
+            transaction_type='redeem',
+            points=points,
+            payment_method=option,  # 'airtime' or 'voucher'
+            status='pending'
+        )
+
+        return Response({
+            'success': True,
+            'message': f'Successfully redeemed {points} points for {option}',
+            'transaction_id': transaction.transaction_id,
+            'wallet': WalletSerializer(wallet).data
+        }, status=status.HTTP_201_CREATED)

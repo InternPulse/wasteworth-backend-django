@@ -4,6 +4,12 @@ from .models import Wallet, WalletTransaction
 
 User = get_user_model()
 
+# Redemption options - subset of payment methods available for point redemption
+REDEMPTION_CHOICES = [
+    choice for choice in WalletTransaction.PAYMENT_METHOD_CHOICES
+    if choice[0] in ['airtime', 'voucher']
+]
+
 
 class WalletSerializer(serializers.ModelSerializer):
     """
@@ -272,3 +278,39 @@ class TransactionFilterSerializer(serializers.Serializer):
             })
         
         return data
+    
+class RedemptionOptionSerializer(serializers.Serializer):
+    
+    redemption_type = serializers.ChoiceField(choices=REDEMPTION_CHOICES)
+    points = serializers.IntegerField(min_value=100, required=True, help_text="Minimum 100 points required for redemption")
+
+    def validate(self, data):
+        redemption_type = data.get('redemption_type')
+        points = data.get('points')
+   
+        if redemption_type in ['voucher', 'airtime'] and points is None:
+            raise serializers.ValidationError("Points are required for voucher or airtime redemption.")
+        return data
+    
+class RedeemPointsSerializer(serializers.Serializer):
+        option = serializers.ChoiceField(choices=REDEMPTION_CHOICES)
+        points = serializers.IntegerField(min_value=100, required=True, help_text="Minimum 100 points required for redemption")
+
+        def validate(self, data):
+            option = data.get('option')
+            points = data.get('points')
+       
+            if option in ['voucher', 'airtime'] and points is None:
+                raise serializers.ValidationError("Points are required for voucher or airtime redemption.")
+            return data
+        
+class RedemptionHistorySerializer(serializers.ModelSerializer):
+        class Meta:
+            model = WalletTransaction
+            fields = [
+                'transaction_id',
+                'transaction_type',
+                'points',
+                'status',
+                'created_at'
+            ]
