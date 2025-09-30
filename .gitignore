@@ -10,6 +10,9 @@ db.sqlite3
 .claude/
 test_db.sqlite3
 nul
+WALLET_DOCUMENTATION.md
+wasteworth_wallet_api.postman_collection.json
+run_auth_tests.py
 
 # Static and Media files
 staticfiles/
