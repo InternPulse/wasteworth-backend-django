@@ -13,8 +13,12 @@ urlpatterns = [
     path('balance/', views.WalletBalanceView.as_view(), name='wallet-balance'),
     path('summary/', views.WalletSummaryView.as_view(), name='wallet-summary'),
     path('stats/', views.wallet_stats, name='wallet-stats'),
-    
+
     # Transaction endpoints
     path('transactions/', views.WalletTransactionsView.as_view(), name='wallet-transactions'),
     path('transactions/<uuid:transaction_id>/', views.WalletTransactionDetailView.as_view(), name='transaction-detail'),
+
+    # Redemption endpoints
+    path('redemption-options/', views.RedemptionOptionsView.as_view(), name='redemption-options'),
+    path('redeem/', views.RedeemPointsView.as_view(), name='redeem-points'),
 ]
