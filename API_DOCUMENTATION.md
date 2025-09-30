@@ -886,6 +886,156 @@ GET /wallet/transactions/?transaction_type=deposit&min_amount=50.00
 }
 ```
 
+### 3. Get Transaction Details
+**GET** `/wallet/transactions/<transaction_id>/`
+**Authentication Required:** Yes
+
+Retrieves detailed information about a specific transaction by its ID.
+
+**Path Parameters:**
+- `transaction_id` - UUID of the transaction
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Transaction details retrieved successfully",
+    "transaction": {
+        "transaction_id": "e665132e-d834-45c2-90be-c4a7fd6d0d34",
+        "wallet_id": "9a3f7748-18cf-4a40-bf09-23185b3baeeb",
+        "user_name": "Test User",
+        "user_email": "test@example.com",
+        "transaction_type": "deposit",
+        "transaction_type_display": "Deposit",
+        "amount": "1000.00",
+        "points": null,
+        "currency": "NGN",
+        "description": "Initial deposit",
+        "reference": "WWE665132E",
+        "payment_method": "bank",
+        "payment_method_display": "Bank Transfer",
+        "status": "success",
+        "status_display": "Success",
+        "metadata": null,
+        "created_at": "2025-09-30T12:35:28.618290Z"
+    }
+}
+```
+
+**Error Response - Transaction Not Found (500):**
+```json
+{
+    "success": false,
+    "message": "An error occurred while retrieving the transaction",
+    "error": {
+        "code": "SERVER_ERROR",
+        "message": "Error retrieving transaction {transaction_id} for user {email}: No WalletTransaction matches the given query."
+    }
+}
+```
+
+**Note:** Transactions belonging to other users will return a 500 error (transaction not found for current user).
+
+**Example Usage:**
+```bash
+# Get specific transaction details
+curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/wallet/transactions/e665132e-d834-45c2-90be-c4a7fd6d0d34/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### 4. Get Redemption Options
+**GET** `/wallet/redemption-options/`
+**Authentication Required:** Yes
+
+Retrieves available options for redeeming eco-points.
+
+**Response (200):**
+```json
+[
+    {
+        "redemption_type": "airtime",
+        "points": 100
+    },
+    {
+        "redemption_type": "voucher",
+        "points": 200
+    }
+]
+```
+
+### 4. Redeem Points
+**POST** `/wallet/redeem/`
+**Authentication Required:** Yes
+
+Redeems eco-points for rewards (airtime or voucher).
+
+**Request Body:**
+```json
+{
+    "option": "airtime",
+    "points": 100
+}
+```
+
+**Validation Rules:**
+- `option`: Must be one of: `airtime`, `voucher`
+- `points`: Minimum 100 points required
+- User must have sufficient points
+
+**Success Response (201):**
+```json
+{
+    "message": "Redeemed 100 points for airtime",
+    "transaction_id": "b44e74df-548d-448e-b430-453105098461",
+    "wallet": {
+        "wallet_id": "9a3f7748-18cf-4a40-bf09-23185b3baeeb",
+        "user_name": "Test User",
+        "user_email": "test@example.com",
+        "balance": "800.00",
+        "currency": "NGN",
+        "points": 55,
+        "is_active": true,
+        "created_at": "2025-09-30T12:34:28.155720Z",
+        "updated_at": "2025-09-30T13:14:18.073028Z"
+    }
+}
+```
+
+**Error Response - Insufficient Points (400):**
+```json
+{
+    "error": "Not enough points"
+}
+```
+
+**Error Response - Below Minimum (400):**
+```json
+{
+    "success": false,
+    "message": "The provided data is invalid. Please check the details below.",
+    "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The provided data is invalid. Please check the details below.",
+        "details": {
+            "points": ["Ensure this value is greater than or equal to 100."]
+        }
+    }
+}
+```
+
+**Example Usage:**
+```bash
+# Get available redemption options
+curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/wallet/redemption-options/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Redeem 100 points for airtime
+curl -X POST https://wasteworth-backend-django.onrender.com/api/v1/wallet/redeem/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"option": "airtime", "points": 100}'
+```
+
 ### Error Handling
 
 All wallet endpoints follow the same error format:

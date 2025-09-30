@@ -22,7 +22,7 @@ class UserSignupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['name','phone','email', 'password', 'confirm_password', 'role']
+        fields = ['name','phone','email', 'password', 'confirm_password', 'role', 'referred_by']
 
     def validate_password(self, value):
         """Comprehensive password validation with detailed feedback"""
@@ -59,11 +59,48 @@ class UserSignupSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
+        from apps.referral.models import Referral
+        from apps.wallet.utils import distribute_referral_reward
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
+        referred_by_code = validated_data.get('referred_by')
+
         user = User.objects.create(**validated_data)
         user.set_password(password)
         user.save()
+
+        # Handle referral reward if user signed up with a referral code
+        if referred_by_code:
+            try:
+                # Find the referrer by their referral code
+                referrer = User.objects.get(referral_code=referred_by_code)
+
+                # Create referral record
+                referral = Referral.objects.create(
+                    referrer=referrer,
+                    referee=user,
+                    status='pending',  # Will be set to 'credited' by distribute_referral_reward
+                    referral_reward=0
+                )
+
+                # Award 100 points to referrer immediately
+                distribute_referral_reward(
+                    referrer_user=referrer,
+                    referee_user=user,
+                    referral_obj=referral
+                )
+
+                logger.info(f"Referral reward distributed: {referrer.email} referred {user.email}")
+
+            except User.DoesNotExist:
+                logger.warning(f"Invalid referral code used during signup: {referred_by_code}")
+            except Exception as e:
+                logger.error(f"Error processing referral reward during signup: {str(e)}")
+
         return user
 
 
