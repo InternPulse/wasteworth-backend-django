@@ -33,6 +33,7 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 # Application definition
 
 INSTALLED_APPS = [
+    'axes',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -59,6 +60,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'axes.middleware.AxesMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -164,6 +166,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom User Model
 AUTH_USER_MODEL = 'users.User'
+
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
 
 # REST Framework Configuration
 REST_FRAMEWORK = {
@@ -293,3 +300,33 @@ RQ_QUEUES = {
         'DEFAULT_TIMEOUT': 500,
     }
 }
+
+# ------------------------------
+# Django-axes Configuration (Brute-force Protection)
+# ------------------------------
+AXES_FAILURE_LIMIT = 5  # Lock after 5 failed attempts
+AXES_COOLOFF_TIME = timedelta(minutes=30)  # 30-minute lockout
+AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']  # Track by username + IP
+AXES_USERNAME_FORM_FIELD = 'email'  # Our login form uses email field
+AXES_ENABLE_ADMIN = True  # Enable admin interface
+AXES_ONLY_ALLOW_FAILURES_ON_POST = True  # Only count POST requests
+AXES_RESET_ON_SUCCESS = True  # Reset counter on successful login
+AXES_VERBOSE = True  # Log axes events
+AXES_LOCKOUT_MESSAGE = 'Too many failed login attempts. Your account has been temporarily locked for security. Please try again in 30 minutes.'
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f"redis://{config('REDIS_HOST', default='localhost')}:{config('REDIS_PORT', default=6379, cast=int)}/1",
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'PASSWORD': config('REDIS_PASSWORD', default=''),
+            'SOCKET_CONNECT_TIMEOUT': 5,
+            'SOCKET_TIMEOUT': 5,
+        },
+        'TIMEOUT': 300,  # 5 minutes default timeout
+    }
+}
+
+# Fallback to database cache if Redis is not available
+AXES_CACHE = 'default'

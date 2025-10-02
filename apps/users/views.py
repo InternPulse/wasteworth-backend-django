@@ -10,6 +10,7 @@ from django.conf import settings
 from datetime import datetime, timedelta
 import jwt
 import logging
+from utils.rate_limiter import rate_limit, ip_key, user_key
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ User = get_user_model()
 # ------------------------------
 
 # POST /api/v1/users/signup/ - Create user account (OTP sending is separate)
+@rate_limit(key_func=ip_key('signup'), rate=10, per=86400)  # 10 signups per day per IP
 @api_view(['POST'])
 def signup(request):
     serializer = UserSignupSerializer(data=request.data)
@@ -69,9 +71,11 @@ def signup(request):
 
 
 # POST /api/v1/users/login/
+@rate_limit(key_func=ip_key('login'), rate=10, per=600)  # 10 attempts per 10 minutes per IP
 @api_view(['POST'])
 def login(request):
-    serializer = UserLoginSerializer(data=request.data)
+    # Pass request context to serializer so authenticate() can access it for axes tracking
+    serializer = UserLoginSerializer(data=request.data, context={'request': request})
     serializer.is_valid(raise_exception=True)
 
     user = serializer.validated_data['user']
@@ -88,6 +92,7 @@ def login(request):
 
 
 # POST /api/v1/users/logout/
+@rate_limit(key_func=user_key('logout'), rate=20, per=60)  # 20 requests per minute per user
 @api_view(['POST'])
 def logout(request):
     try:
@@ -139,6 +144,7 @@ class ForgotPasswordView(generics.GenericAPIView):
     serializer_class = ForgotPasswordSerializer
     permission_classes = []  # No auth needed
 
+    @rate_limit(key_func=ip_key('forgot_password'), rate=3, per=3600)  # 3 requests per hour per IP
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -182,6 +188,7 @@ class UpdatePasswordView(generics.GenericAPIView):
     serializer_class = UpdatePasswordSerializer
     permission_classes = [IsAuthenticated]
 
+    @rate_limit(key_func=user_key('update_password'), rate=5, per=3600)  # 5 attempts per hour per user
     def patch(self, request, *args, **kwargs):
         # Check if OTP is provided in the request
         otp_code = request.data.get('otp')
@@ -379,6 +386,7 @@ class ResetPasswordView(generics.GenericAPIView):
     serializer_class = ResetPasswordSerializer
     permission_classes = []  # No authentication required
 
+    @rate_limit(key_func=ip_key('reset_password'), rate=5, per=3600)  # 5 attempts per hour per IP
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

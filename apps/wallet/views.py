@@ -7,6 +7,7 @@ from rest_framework.pagination import PageNumberPagination
 from django.db.models import Sum, Q
 from django.shortcuts import get_object_or_404
 import logging
+from utils.rate_limiter import rate_limit, user_key
 
 # Import error handler if it exists, following the same pattern as users/views.py
 try:
@@ -184,6 +185,7 @@ class WalletTransactionsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     pagination_class = WalletTransactionPagination
 
+    @rate_limit(key_func=user_key('wallet_transactions'), rate=100, per=60)  # 100 requests per minute per user
     def get_queryset(self):
         """
         Filter transactions for authenticated user's wallet.
@@ -461,6 +463,7 @@ class RedeemPointsView(generics.GenericAPIView):
     serializer_class = RedeemPointsSerializer
     permission_classes = [IsAuthenticated]
 
+    @rate_limit(key_func=user_key('wallet_redeem'), rate=20, per=3600)  # 20 redemptions per hour per user
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
