@@ -2,10 +2,18 @@ from rest_framework.views import exception_handler
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.serializers import ValidationError
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, Throttled, PermissionDenied
 from rest_framework_simplejwt.exceptions import TokenError
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied as DjangoPermissionDenied
 import re
+
+# Import axes exception
+try:
+    from axes.exceptions import AxesBackendPermissionDenied
+    AXES_AVAILABLE = True
+except ImportError:
+    AXES_AVAILABLE = False
+    AxesBackendPermissionDenied = None
 
 
 class ErrorCodes:
@@ -33,6 +41,12 @@ class ErrorCodes:
     PROFILE_UPDATE_FAILED = "PROFILE_UPDATE_FAILED"
     EMAIL_UPDATE_REQUIRES_OTP = "EMAIL_UPDATE_REQUIRES_OTP"
 
+    # Rate limiting errors
+    RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+
+    # Account security errors
+    ACCOUNT_LOCKED = "ACCOUNT_LOCKED"
+
     # General errors
     NOT_FOUND = "NOT_FOUND"
     SERVER_ERROR = "SERVER_ERROR"
@@ -56,6 +70,8 @@ ERROR_MESSAGES = {
     ErrorCodes.OTP_SEND_FAILED: "Failed to send OTP. Please try again later.",
     ErrorCodes.PROFILE_UPDATE_FAILED: "Failed to update profile. Please check your data and try again.",
     ErrorCodes.EMAIL_UPDATE_REQUIRES_OTP: "Changing your email address requires OTP verification for security.",
+    ErrorCodes.RATE_LIMIT_EXCEEDED: "Too many requests. Please slow down and try again later.",
+    ErrorCodes.ACCOUNT_LOCKED: "Too many failed login attempts. Your account has been temporarily locked for security. Please try again in 30 minutes.",
     ErrorCodes.NOT_FOUND: "The requested resource was not found.",
     ErrorCodes.SERVER_ERROR: "Something went wrong on our end. Please try again later.",
     ErrorCodes.PERMISSION_DENIED: "You don't have permission to perform this action.",
@@ -174,9 +190,47 @@ def get_frontend_friendly_message(original_data, fallback_message):
 
 def custom_exception_handler(exc, context):
     """Custom exception handler that formats all errors consistently"""
+
+    # Handle AxesBackendPermissionDenied (account locked) BEFORE default handler
+    if AXES_AVAILABLE and AxesBackendPermissionDenied and isinstance(exc, AxesBackendPermissionDenied):
+        custom_response_data = {
+            'success': False,
+            'message': ERROR_MESSAGES[ErrorCodes.ACCOUNT_LOCKED],
+            'error': {
+                'code': ErrorCodes.ACCOUNT_LOCKED,
+                'message': ERROR_MESSAGES[ErrorCodes.ACCOUNT_LOCKED],
+                'details': {
+                    'lockout_duration': ['30 minutes']
+                }
+            }
+        }
+        return Response(custom_response_data, status=status.HTTP_403_FORBIDDEN)
+
+    # Handle Throttled exception BEFORE calling default handler
+    # because DRF's handler might not process it correctly in all cases
+    if isinstance(exc, Throttled):
+        wait_time = getattr(exc, 'wait', None)
+        custom_response_data = {
+            'success': False,
+            'message': ERROR_MESSAGES[ErrorCodes.RATE_LIMIT_EXCEEDED],
+            'error': {
+                'code': ErrorCodes.RATE_LIMIT_EXCEEDED,
+                'message': ERROR_MESSAGES[ErrorCodes.RATE_LIMIT_EXCEEDED],
+                'details': {
+                    'retry_after': [f'{wait_time} seconds'] if wait_time else ['Please try again later']
+                }
+            }
+        }
+        response = Response(custom_response_data, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        # Set Retry-After header for HTTP spec compliance
+        if wait_time:
+            response['Retry-After'] = str(int(wait_time))
+        return response
+
     response = exception_handler(exc, context)
 
     if response is not None:
+        # Standard error handling
         error_code = get_error_code(exc)
         user_message = get_user_friendly_message(exc)
         field_errors = format_field_errors(response.data)

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.hashers import check_password,make_password
 from django.core.mail import send_mail
@@ -117,14 +117,24 @@ class UserLoginSerializer(serializers.Serializer):
         if not password:
             raise serializers.ValidationError({'password': ["Password is required."]})
 
-        try:
-            user = User.objects.get(email=email)
-            if not user.check_password(password):
-                raise serializers.ValidationError("The password you entered is incorrect. Please try again.")
-            data['user'] = user
-        except User.DoesNotExist:
-            raise serializers.ValidationError("No account found with this email address. Please check your email or sign up.")
+        # Use Django's authenticate() to enable django-axes tracking
+        # Note: authenticate() expects 'username' parameter even though we're using email
+        user = authenticate(
+            request=self.context.get('request'),
+            username=email,
+            password=password
+        )
 
+        if user is None:
+            # Authentication failed - either user doesn't exist or wrong password
+            # Using generic message for security (prevents username enumeration)
+            raise serializers.ValidationError("Invalid email or password. Please try again.")
+
+        # Check if user account is active
+        if not user.is_active:
+            raise serializers.ValidationError("This account has been deactivated. Please contact support.")
+
+        data['user'] = user
         return data
 
 
