@@ -464,6 +464,7 @@ class RedeemPointsView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     @rate_limit(key_func=user_key('wallet_redeem'), rate=20, per=3600)  # 20 redemptions per hour per user
+    @transaction.atomic
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -471,7 +472,9 @@ class RedeemPointsView(generics.GenericAPIView):
         option = serializer.validated_data['option']
         points = serializer.validated_data['points']
 
-        wallet = request.user.wallet
+        # Lock the wallet row to prevent race conditions
+        wallet = Wallet.objects.select_for_update().get(user=request.user)
+
         if wallet.points < points:
             return Response({
                 'success': False,
@@ -485,12 +488,31 @@ class RedeemPointsView(generics.GenericAPIView):
                 }
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Deduct points
-        wallet.points -= points
-        wallet.save()
+        # Deduct points atomically using F() expression
+        updated_count = Wallet.objects.filter(
+            id=wallet.id,
+            points__gte=points  # Double-check at database level
+        ).update(points=F('points') - points)
+
+        if updated_count == 0:
+            # Race condition occurred - another request took the points
+            return Response({
+                'success': False,
+                'message': 'Insufficient points to process this transaction',
+                'error': {
+                    'code': 'INSUFFICIENT_POINTS',
+                    'message': 'Insufficient points to process this transaction',
+                    'details': {
+                        'points': ['Insufficient points to process this transaction']
+                    }
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Refresh wallet to get updated points
+        wallet.refresh_from_db()
 
         # Create a transaction
-        transaction = WalletTransaction.objects.create(
+        transaction_obj = WalletTransaction.objects.create(
             wallet=wallet,
             user=request.user,
             transaction_type='redeem',
@@ -502,6 +524,6 @@ class RedeemPointsView(generics.GenericAPIView):
         return Response({
             'success': True,
             'message': f'Successfully redeemed {points} points for {option}',
-            'transaction_id': transaction.transaction_id,
+            'transaction_id': transaction_obj.transaction_id,
             'wallet': WalletSerializer(wallet).data
         }, status=status.HTTP_201_CREATED)
