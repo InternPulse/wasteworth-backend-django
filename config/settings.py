@@ -330,3 +330,9 @@ CACHES = {
 
 # Fallback to database cache if Redis is not available
 AXES_CACHE = 'default'
+
+# ------------------------------
+# Node.js Service Configuration
+# ------------------------------
+NODE_SERVICE_URL = config('NODE_SERVICE_URL', default='http://localhost:3000')
+INTERNAL_API_KEY = config('INTERNAL_API_KEY', default='')
