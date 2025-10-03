@@ -32,8 +32,8 @@ def distribute_activity_reward(user, quantity_kg, transaction_type='activity_rew
             return None
 
         with transaction.atomic():
-            # Get or create wallet
-            wallet, created = Wallet.objects.get_or_create(
+            # Get or create wallet with row lock to prevent race conditions
+            wallet, created = Wallet.objects.select_for_update().get_or_create(
                 user=user,
                 defaults={
                     'balance': Decimal('0.00'),
@@ -43,9 +43,12 @@ def distribute_activity_reward(user, quantity_kg, transaction_type='activity_rew
                 }
             )
 
-            # Update wallet points
-            wallet.points += points
-            wallet.save()
+            # Update wallet points atomically using F() expression
+            from django.db.models import F
+            Wallet.objects.filter(id=wallet.id).update(points=F('points') + points)
+
+            # Refresh wallet to get updated points
+            wallet.refresh_from_db()
 
             # Create transaction record
             wallet_transaction = WalletTransaction.objects.create(
@@ -88,8 +91,9 @@ def distribute_referral_reward(referrer_user, referee_user, referral_obj=None, i
         points = 100
 
         with transaction.atomic():
-            # Get or create referrer's wallet
-            wallet, created = Wallet.objects.get_or_create(
+            # Get or create referrer's wallet with row lock to prevent race conditions
+            from django.db.models import F
+            wallet, created = Wallet.objects.select_for_update().get_or_create(
                 user=referrer_user,
                 defaults={
                     'balance': Decimal('0.00'),
@@ -99,9 +103,11 @@ def distribute_referral_reward(referrer_user, referee_user, referral_obj=None, i
                 }
             )
 
-            # Update wallet points
-            wallet.points += points
-            wallet.save()
+            # Update wallet points atomically using F() expression
+            Wallet.objects.filter(id=wallet.id).update(points=F('points') + points)
+
+            # Refresh wallet to get updated points
+            wallet.refresh_from_db()
 
             # Create transaction record with appropriate description
             if is_signup:
