@@ -51,6 +51,8 @@ INSTALLED_APPS = [
     'apps.otp',            # Added OTP app
     'apps.referral',       # Added referral app
     'apps.marketplace',    # Added marketplace app
+    "cloudinary", 
+    "cloudinary_storage",
 ]
 
 MIDDLEWARE = [
