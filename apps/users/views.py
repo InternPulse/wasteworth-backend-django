@@ -10,6 +10,7 @@ from django.conf import settings
 from datetime import datetime, timedelta
 import jwt
 import logging
+import requests
 from utils.rate_limiter import rate_limit, ip_key, user_key
 
 logger = logging.getLogger(__name__)
@@ -276,11 +277,160 @@ class UpdatePasswordView(generics.GenericAPIView):
 
 # GET /api/v1/users/user-dashboard/
 class UserDashboardView(generics.GenericAPIView):
+    """
+    User dashboard endpoint that combines user profile data with listing statistics
+    from the Node.js service.
+    """
     permission_classes = [IsAuthenticated]
 
+    def _fetch_listing_data(self, user_id, auth_token=None):
+        """
+        Fetch listing summary from Node.js service.
+
+        Args:
+            user_id: The user ID to fetch listings for
+            auth_token: JWT token from the authenticated user (optional)
+
+        Returns:
+            tuple: (dict with 'total_listings' and 'sold_listings', node_status string)
+                   Returns default values (0, 0) and 'unavailable' if Node service fails
+        """
+        default_data = {
+            'total_listings': 0,
+            'sold_listings': 0
+        }
+
+        # Check if Node service is configured
+        if not settings.NODE_SERVICE_URL or not settings.INTERNAL_API_KEY:
+            logger.warning(
+                "Node service not configured. Set NODE_SERVICE_URL and INTERNAL_API_KEY in environment.",
+                extra={'node_status': 'unavailable'}
+            )
+            return default_data, 'unavailable'
+
+        # Check if auth token is provided
+        if not auth_token:
+            logger.warning(
+                "No authentication token provided for Node service request",
+                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
+            )
+            return default_data, 'unavailable'
+
+        try:
+            # Build the URL
+            url = f"{settings.NODE_SERVICE_URL}/api/v1/listings/listingstats"
+
+            # Set headers with BOTH user JWT token AND internal API key
+            headers = {
+                'Authorization': f'Bearer {auth_token}',
+                'api_key': f'Bearer {settings.INTERNAL_API_KEY}',
+                'Content-Type': 'application/json'
+            }
+
+            # Make request with timeout
+            response = requests.get(
+                url,
+                headers=headers,
+                timeout=3  # 3 second timeout
+            )
+
+            # Raise exception for 4xx/5xx status codes
+            response.raise_for_status()
+
+            # Parse JSON response
+            data = response.json()
+
+            # Extract listing data with fallback to defaults
+            # Node returns: total_waste_posted, total_waste_completed
+            # We map them to: total_listings, sold_listings
+            listing_data = {
+                'total_listings': data.get('total_waste_posted', data.get('total_listings', 0)),
+                'sold_listings': data.get('total_waste_completed', data.get('sold_listings', 0))
+            }
+
+            # Log success
+            logger.info(
+                f"Successfully fetched listing data for user {user_id}",
+                extra={'node_status': 'ok', 'user_id': str(user_id)}
+            )
+
+            return listing_data, 'ok'
+
+        except requests.exceptions.Timeout:
+            logger.error(
+                f"Timeout fetching listing data for user {user_id} from Node service",
+                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
+            )
+            return default_data, 'unavailable'
+
+        except requests.exceptions.ConnectionError:
+            logger.error(
+                f"Connection error fetching listing data for user {user_id} from Node service",
+                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
+            )
+            return default_data, 'unavailable'
+
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code if e.response else 'unknown'
+            logger.error(
+                f"HTTP error fetching listing data for user {user_id}: {status_code}",
+                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
+            )
+            return default_data, 'unavailable'
+
+        except (ValueError, KeyError) as e:
+            logger.error(
+                f"Invalid JSON response from Node service for user {user_id}: {str(e)}",
+                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
+            )
+            return default_data, 'unavailable'
+
+        except Exception as e:
+            logger.error(
+                f"Unexpected error fetching listing data for user {user_id}: {str(e)}",
+                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
+            )
+            return default_data, 'unavailable'
+
     def get(self, request):
+        """
+        Get user dashboard data including profile and listing statistics.
+
+        Returns user profile data merged with listing data from Node.js service.
+        If Node service fails, returns user profile with default listing values (0).
+
+        Logs node_status internally ('ok' or 'unavailable') for monitoring.
+        """
+        # Serialize user profile data
         serializer = UserProfileSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        user_data = serializer.data
+
+        # Extract JWT token from Authorization header
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        auth_token = None
+        if auth_header.startswith('Bearer '):
+            auth_token = auth_header.split(' ')[1]
+
+        # Fetch listing data from Node service with user's JWT token
+        listing_data, node_status = self._fetch_listing_data(request.user.id, auth_token)
+
+        # Log the node status (internal monitoring only, not exposed to frontend)
+        logger.info(
+            f"Dashboard request for user {request.user.id}",
+            extra={
+                'user_id': str(request.user.id),
+                'node_status': node_status,
+                'endpoint': 'user_dashboard'
+            }
+        )
+
+        # Merge user data with listing data (node_status NOT included)
+        dashboard_data = {
+            **user_data,
+            **listing_data
+        }
+
+        return Response(dashboard_data, status=status.HTTP_200_OK)
 
 
 # PATCH /api/v1/users/update-user/
