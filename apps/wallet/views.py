@@ -4,7 +4,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import Sum, Q
+from django.db.models import Sum, F
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 import logging
 from utils.rate_limiter import rate_limit, user_key
@@ -32,7 +33,9 @@ from .serializers import (
     WalletSerializer,
     TransactionSerializer,
     WalletSummarySerializer,
-    TransactionFilterSerializer,RedeemPointsSerializer,RedemptionHistorySerializer,RedemptionOptionSerializer
+    RedeemPointsSerializer,
+    RedemptionHistorySerializer,
+    RedemptionOptionSerializer
 )
 
 logger = logging.getLogger(__name__)
@@ -178,7 +181,7 @@ class WalletSummaryView(generics.GenericAPIView):
 # GET /api/v1/wallet/transactions/
 class WalletTransactionsView(generics.ListAPIView):
     """
-    Get paginated list of wallet transactions with filtering support.
+    Get paginated list of wallet transactions.
     Follows the same pattern as other list views in the project.
     """
     serializer_class = TransactionSerializer
@@ -188,84 +191,33 @@ class WalletTransactionsView(generics.ListAPIView):
     @rate_limit(key_func=user_key('wallet_transactions'), rate=100, per=60)  # 100 requests per minute per user
     def get_queryset(self):
         """
-        Filter transactions for authenticated user's wallet.
-        Supports filtering by transaction type, status, payment method, date range, and amount range.
+        Get transactions for authenticated user's wallet.
+        Returns all transactions ordered by most recent first.
         """
         try:
             # Get user's wallet
             wallet = get_object_or_404(Wallet, user=self.request.user)
             
-            # Base queryset
+            # Return all user's transactions ordered by most recent first
             queryset = WalletTransaction.objects.filter(
                 wallet=wallet
             ).select_related('user', 'wallet').order_by('-created_at')
-            
-            # Apply filters based on query parameters
-            transaction_type = self.request.query_params.get('transaction_type')
-            if transaction_type:
-                queryset = queryset.filter(transaction_type=transaction_type)
-            
-            payment_method = self.request.query_params.get('payment_method')
-            if payment_method:
-                queryset = queryset.filter(payment_method=payment_method)
-            
-            status_filter = self.request.query_params.get('status')
-            if status_filter:
-                queryset = queryset.filter(status=status_filter)
-            
-            # Date range filtering
-            date_from = self.request.query_params.get('date_from')
-            date_to = self.request.query_params.get('date_to')
-            
-            if date_from:
-                queryset = queryset.filter(created_at__gte=date_from)
-            if date_to:
-                queryset = queryset.filter(created_at__lte=date_to)
-            
-            # Amount range filtering
-            min_amount = self.request.query_params.get('min_amount')
-            max_amount = self.request.query_params.get('max_amount')
-            
-            if min_amount:
-                queryset = queryset.filter(amount__gte=min_amount)
-            if max_amount:
-                queryset = queryset.filter(amount__lte=max_amount)
-            
-            # Search by description or reference
-            search = self.request.query_params.get('search')
-            if search:
-                queryset = queryset.filter(
-                    Q(description__icontains=search) |
-                    Q(reference__icontains=search)
-                )
-            
+
             return queryset
             
         except Wallet.DoesNotExist:
             logger.warning(f"Wallet not found for user {self.request.user.email}")
             return WalletTransaction.objects.none()
         except Exception as e:
-            logger.error(f"Error filtering transactions for user {self.request.user.email}: {str(e)}")
+            logger.error(f"Error retrieving transactions for user {self.request.user.email}: {str(e)}")
             return WalletTransaction.objects.none()
 
     def list(self, request, *args, **kwargs):
         """
-        Override list method to add filtering validation and custom response format.
+        Override list method to add custom response format.
         Follows the same pattern as other API views in the project.
         """
         try:
-            # Validate filter parameters
-            filter_serializer = TransactionFilterSerializer(data=request.query_params)
-            if not filter_serializer.is_valid():
-                return Response({
-                    'success': False,
-                    'error': {
-                        'code': ErrorCodes.VALIDATION_ERROR,
-                        'message': ERROR_MESSAGES[ErrorCodes.VALIDATION_ERROR],
-                        'details': filter_serializer.errors
-                    }
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
             # Get paginated results
             queryset = self.filter_queryset(self.get_queryset())
             page = self.paginate_queryset(queryset)

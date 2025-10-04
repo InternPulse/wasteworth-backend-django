@@ -33,9 +33,28 @@ def send_otp(request):
         # Generate and send OTP
         otp_result = generate_and_send_otp(user, purpose)
 
+        # Check if email sending failed
+        if not otp_result.get('success', False):
+            # Log the failure for debugging
+            logger.error(
+                f"OTP email failed for user {user.email}: {otp_result.get('error', 'Unknown error')}",
+                extra={'user_email': user.email, 'purpose': purpose}
+            )
+
+            # Return success to prevent account enumeration, but hint at potential delay
+            return Response({
+                'success': True,
+                'message': 'OTP is being sent. If you don\'t receive it within 2 minutes, click "Resend OTP".',
+                'email_status': 'pending',
+                'otp_id': str(otp_result['otp_instance'].id),
+                'expires_at': otp_result['otp_instance'].expires_at
+            }, status=status.HTTP_200_OK)
+
+        # Email sent successfully
         return Response({
             'success': True,
             'message': 'OTP sent successfully',
+            'email_status': 'sent',
             'otp_id': str(otp_result['otp_instance'].id),
             'expires_at': otp_result['otp_instance'].expires_at
         }, status=status.HTTP_200_OK)
@@ -158,9 +177,27 @@ def resend_otp(request):
         # Generate new OTP
         otp_result = generate_and_send_otp(user, purpose)
 
+        # Check if email sending failed
+        if not otp_result.get('success', False):
+            # Log the failure for debugging
+            logger.error(
+                f"Resend OTP email failed for user {user.email}: {otp_result.get('error', 'Unknown error')}",
+                extra={'user_email': user.email, 'purpose': purpose}
+            )
+
+            # Return success to prevent account enumeration, but hint at potential delay
+            return Response({
+                'success': True,
+                'message': 'New OTP is being sent. If you don\'t receive it, please try again or contact support.',
+                'email_status': 'pending',
+                'otp_id': str(otp_result['otp_instance'].id)
+            }, status=status.HTTP_200_OK)
+
+        # Email sent successfully
         return Response({
             'success': True,
             'message': 'New OTP sent successfully',
+            'email_status': 'sent',
             'otp_id': str(otp_result['otp_instance'].id)
         }, status=status.HTTP_200_OK)
 

@@ -30,6 +30,48 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 # ALLOWED_HOSTS = ["*"]
 
 
+# ===================================================================
+# PRODUCTION SECURITY SETTINGS
+# ===================================================================
+
+# HTTPS/SSL Configuration
+# Auto-enable in production (DEBUG=False), disable in development (DEBUG=True)
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=not DEBUG, cast=bool)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# HTTP Strict Transport Security (HSTS)
+# Tells browsers to only use HTTPS for 1 year (31536000 seconds)
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000 if not DEBUG else 0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=not DEBUG, cast=bool)
+SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=not DEBUG, cast=bool)
+
+# Cookie Security
+# Session cookies only transmitted over HTTPS in production
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=not DEBUG, cast=bool)
+SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookies
+SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF protection
+
+# CSRF cookies only transmitted over HTTPS in production
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=not DEBUG, cast=bool)
+CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF tokens
+CSRF_COOKIE_SAMESITE = 'Lax'  # CSRF protection
+
+# Browser Security Headers
+SECURE_BROWSER_XSS_FILTER = True  # Enable browser XSS protection
+SECURE_CONTENT_TYPE_NOSNIFF = True  # Prevent MIME type sniffing
+X_FRAME_OPTIONS = 'DENY'  # Prevent clickjacking attacks
+
+# Additional Security
+SECURE_REFERRER_POLICY = 'same-origin'  # Control referrer information
+
+# Ensure SECRET_KEY is set in production
+if not DEBUG and SECRET_KEY == 'django-insecure-fallback-key':
+    raise ValueError(
+        "SECRET_KEY must be set to a secure random value in production. "
+        "Add SECRET_KEY to your environment variables."
+    )
+
+
 # Application definition
 
 INSTALLED_APPS = [
