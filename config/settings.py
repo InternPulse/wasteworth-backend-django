@@ -431,6 +431,13 @@ CACHES = {
             'PASSWORD': config('REDIS_PASSWORD', default=''),
             'SOCKET_CONNECT_TIMEOUT': 5,
             'SOCKET_TIMEOUT': 5,
+            'RETRY_ON_TIMEOUT': True,  # Auto-retry on timeout
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 50,
+                'retry_on_timeout': True,
+                'health_check_interval': 30,  # Check connection health every 30 seconds
+            },
+            'IGNORE_EXCEPTIONS': True,  # Fail gracefully if Redis is unavailable
         },
         'TIMEOUT': 300,  # 5 minutes default timeout
     }
