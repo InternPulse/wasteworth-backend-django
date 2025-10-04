@@ -139,10 +139,14 @@ def distribute_referral_reward(referrer_user, referee_user, referral_obj=None, i
         return None
 
 
+@transaction.atomic
 def process_marketplace_rewards(marketplace_listing):
     """
     Process rewards for both disposer (seller) and recycler (buyer) when escrow is released.
     Also handles referral rewards if this is the first transaction for either party.
+
+    Uses @transaction.atomic to ensure all-or-nothing reward distribution.
+    If any reward fails, all rewards are rolled back to maintain consistency.
 
     Args:
         marketplace_listing: MarketplaceListing object with escrow_status='released'

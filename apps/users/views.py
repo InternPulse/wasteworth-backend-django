@@ -320,18 +320,16 @@ class UserDashboardView(generics.GenericAPIView):
             # Build the URL
             url = f"{settings.NODE_SERVICE_URL}/api/v1/listings/listingstats"
 
-            # Set headers with BOTH user JWT token AND internal API key
-            headers = {
-                'Authorization': f'Bearer {auth_token}',
-                'api_key': f'Bearer {settings.INTERNAL_API_KEY}',
-                'Content-Type': 'application/json'
-            }
-
             # Make request with timeout
+            # Note: headers built inline to avoid storing sensitive data in variables
             response = requests.get(
                 url,
-                headers=headers,
-                timeout=3  # 3 second timeout
+                headers={
+                    'Authorization': f'Bearer {auth_token}',
+                    'api_key': f'Bearer {settings.INTERNAL_API_KEY}',
+                    'Content-Type': 'application/json'
+                },
+                timeout=10  # 10 second timeout
             )
 
             # Raise exception for 4xx/5xx status codes
@@ -378,20 +376,22 @@ class UserDashboardView(generics.GenericAPIView):
             )
             return default_data, 'unavailable'
 
-        except (ValueError, KeyError) as e:
+        except (ValueError, KeyError):
             logger.error(
-                f"Invalid JSON response from Node service for user {user_id}: {str(e)}",
+                f"Invalid JSON response from Node service for user {user_id}",
                 extra={'node_status': 'unavailable', 'user_id': str(user_id)}
             )
             return default_data, 'unavailable'
 
-        except Exception as e:
+        except Exception:
+            # Don't log exception details as they may contain sensitive headers
             logger.error(
-                f"Unexpected error fetching listing data for user {user_id}: {str(e)}",
+                f"Unexpected error fetching listing data for user {user_id}",
                 extra={'node_status': 'unavailable', 'user_id': str(user_id)}
             )
             return default_data, 'unavailable'
 
+    @rate_limit(key_func=user_key('dashboard'),rate=30,per=60)
     def get(self, request):
         """
         Get user dashboard data including profile and listing statistics.
