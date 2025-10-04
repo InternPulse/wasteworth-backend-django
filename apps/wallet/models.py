@@ -24,7 +24,23 @@ class WalletTransaction(models.Model):
     class Meta:
         db_table = 'wallet_transactions'
         ordering = ['-created_at']
-    
+        indexes = [
+            # For wallet transaction history queries (most common)
+            models.Index(fields=['wallet', '-created_at'], name='wallet_created_idx'),
+
+            # For user transaction history queries
+            models.Index(fields=['user', '-created_at'], name='user_created_idx'),
+
+            # For wallet + type filtering (credits, debits, etc.)
+            models.Index(fields=['wallet', 'transaction_type', '-created_at'], name='wallet_type_idx'),
+
+            # For counting user's activity/referral rewards
+            models.Index(fields=['user', 'transaction_type'], name='user_type_idx'),
+
+            # For admin queries on pending/failed transactions
+            models.Index(fields=['status', '-created_at'], name='status_created_idx'),
+        ]
+
     TRANSACTION_TYPE_CHOICES = [
         ('credit', 'Credit'),
         ('debit', 'Debit'),

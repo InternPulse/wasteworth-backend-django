@@ -15,7 +15,12 @@ class UserAdmin(BaseUserAdmin):
     list_filter = ('is_active', 'is_staff', 'is_verified', 'role', 'created_at')
     ordering = ('email',)
     readonly_fields = ('wallet_balance', 'id', 'created_at', 'updated_at', 'last_login')
-    
+
+    def wallet_balance(self, obj):
+        """Display wallet balance from related Wallet model."""
+        return f"{obj.wallet.balance} {obj.wallet.currency}" if hasattr(obj, 'wallet') else "No wallet"
+    wallet_balance.short_description = 'Wallet Balance'
+
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         (_('Personal info'), {'fields': ('name', 'phone', 'address_location')}),

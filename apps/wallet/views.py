@@ -4,14 +4,15 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import Sum, Q
+from django.db.models import Sum, F
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 import logging
 from utils.rate_limiter import rate_limit, user_key
 
 # Import error handler if it exists, following the same pattern as users/views.py
 try:
-    from utils.error_handler import ErrorCodes, ERROR_MESSAGES
+    from utils.error_handler import ErrorCodes, ERROR_MESSAGES, error_response
 except ImportError:
     # Fallback error handling if utils.error_handler doesn't exist
     class ErrorCodes:
@@ -32,7 +33,9 @@ from .serializers import (
     WalletSerializer,
     TransactionSerializer,
     WalletSummarySerializer,
-    TransactionFilterSerializer,RedeemPointsSerializer,RedemptionHistorySerializer,RedemptionOptionSerializer
+    RedeemPointsSerializer,
+    RedemptionHistorySerializer,
+    RedemptionOptionSerializer
 )
 
 logger = logging.getLogger(__name__)
@@ -81,16 +84,7 @@ class WalletBalanceView(generics.GenericAPIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error retrieving wallet for user {request.user.email}: {str(e)}")
-            return Response({
-                'success': False,
-                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Failed to retrieve wallet information.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Error retrieving wallet for user {request.user.email}", e)
 
 
 # GET /api/v1/wallet/summary/
@@ -159,16 +153,7 @@ class WalletSummaryView(generics.GenericAPIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error retrieving wallet summary for user {request.user.email}: {str(e)}")
-            return Response({
-                'success': False,
-                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Failed to retrieve wallet summary.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Error retrieving wallet summary for user {request.user.email}", e)
 
 
 # ------------------------------
@@ -178,7 +163,7 @@ class WalletSummaryView(generics.GenericAPIView):
 # GET /api/v1/wallet/transactions/
 class WalletTransactionsView(generics.ListAPIView):
     """
-    Get paginated list of wallet transactions with filtering support.
+    Get paginated list of wallet transactions.
     Follows the same pattern as other list views in the project.
     """
     serializer_class = TransactionSerializer
@@ -188,84 +173,33 @@ class WalletTransactionsView(generics.ListAPIView):
     @rate_limit(key_func=user_key('wallet_transactions'), rate=100, per=60)  # 100 requests per minute per user
     def get_queryset(self):
         """
-        Filter transactions for authenticated user's wallet.
-        Supports filtering by transaction type, status, payment method, date range, and amount range.
+        Get transactions for authenticated user's wallet.
+        Returns all transactions ordered by most recent first.
         """
         try:
             # Get user's wallet
             wallet = get_object_or_404(Wallet, user=self.request.user)
             
-            # Base queryset
+            # Return all user's transactions ordered by most recent first
             queryset = WalletTransaction.objects.filter(
                 wallet=wallet
             ).select_related('user', 'wallet').order_by('-created_at')
-            
-            # Apply filters based on query parameters
-            transaction_type = self.request.query_params.get('transaction_type')
-            if transaction_type:
-                queryset = queryset.filter(transaction_type=transaction_type)
-            
-            payment_method = self.request.query_params.get('payment_method')
-            if payment_method:
-                queryset = queryset.filter(payment_method=payment_method)
-            
-            status_filter = self.request.query_params.get('status')
-            if status_filter:
-                queryset = queryset.filter(status=status_filter)
-            
-            # Date range filtering
-            date_from = self.request.query_params.get('date_from')
-            date_to = self.request.query_params.get('date_to')
-            
-            if date_from:
-                queryset = queryset.filter(created_at__gte=date_from)
-            if date_to:
-                queryset = queryset.filter(created_at__lte=date_to)
-            
-            # Amount range filtering
-            min_amount = self.request.query_params.get('min_amount')
-            max_amount = self.request.query_params.get('max_amount')
-            
-            if min_amount:
-                queryset = queryset.filter(amount__gte=min_amount)
-            if max_amount:
-                queryset = queryset.filter(amount__lte=max_amount)
-            
-            # Search by description or reference
-            search = self.request.query_params.get('search')
-            if search:
-                queryset = queryset.filter(
-                    Q(description__icontains=search) |
-                    Q(reference__icontains=search)
-                )
-            
+
             return queryset
             
         except Wallet.DoesNotExist:
             logger.warning(f"Wallet not found for user {self.request.user.email}")
             return WalletTransaction.objects.none()
         except Exception as e:
-            logger.error(f"Error filtering transactions for user {self.request.user.email}: {str(e)}")
+            logger.error(f"Error retrieving transactions for user {self.request.user.email}: {str(e)}")
             return WalletTransaction.objects.none()
 
     def list(self, request, *args, **kwargs):
         """
-        Override list method to add filtering validation and custom response format.
+        Override list method to add custom response format.
         Follows the same pattern as other API views in the project.
         """
         try:
-            # Validate filter parameters
-            filter_serializer = TransactionFilterSerializer(data=request.query_params)
-            if not filter_serializer.is_valid():
-                return Response({
-                    'success': False,
-                    'error': {
-                        'code': ErrorCodes.VALIDATION_ERROR,
-                        'message': ERROR_MESSAGES[ErrorCodes.VALIDATION_ERROR],
-                        'details': filter_serializer.errors
-                    }
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
             # Get paginated results
             queryset = self.filter_queryset(self.get_queryset())
             page = self.paginate_queryset(queryset)
@@ -291,15 +225,7 @@ class WalletTransactionsView(generics.ListAPIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error listing transactions for user {request.user.email}: {str(e)}")
-            return Response({
-                'success': False,
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Failed to retrieve transactions.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Error listing transactions for user {request.user.email}", e)
 
 
 # GET /api/v1/wallet/transactions/<transaction_id>/
@@ -340,15 +266,7 @@ class WalletTransactionDetailView(generics.GenericAPIView):
                 }
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving transaction {transaction_id} for user {request.user.email}: {str(e)}")
-            return Response({
-                'success': False,
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Failed to retrieve transaction details.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Error retrieving transaction {transaction_id} for user {request.user.email}", e)
 
 
 # ------------------------------
@@ -431,15 +349,7 @@ def wallet_stats(request):
             }
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        logger.error(f"Error retrieving wallet stats for user {request.user.email}: {str(e)}")
-        return Response({
-            'success': False,
-            'error': {
-                'code': ErrorCodes.SERVER_ERROR,
-                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                'details': {'error': ['Failed to retrieve wallet statistics.']}
-            }
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return error_response(logger, f"Error retrieving wallet stats for user {request.user.email}", e)
     
 
 class RedemptionOptionsView(generics.GenericAPIView):
@@ -464,6 +374,7 @@ class RedeemPointsView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     @rate_limit(key_func=user_key('wallet_redeem'), rate=20, per=3600)  # 20 redemptions per hour per user
+    @transaction.atomic
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -471,7 +382,9 @@ class RedeemPointsView(generics.GenericAPIView):
         option = serializer.validated_data['option']
         points = serializer.validated_data['points']
 
-        wallet = request.user.wallet
+        # Lock the wallet row to prevent race conditions
+        wallet = Wallet.objects.select_for_update().get(user=request.user)
+
         if wallet.points < points:
             return Response({
                 'success': False,
@@ -485,12 +398,31 @@ class RedeemPointsView(generics.GenericAPIView):
                 }
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Deduct points
-        wallet.points -= points
-        wallet.save()
+        # Deduct points atomically using F() expression
+        updated_count = Wallet.objects.filter(
+            id=wallet.id,
+            points__gte=points  # Double-check at database level
+        ).update(points=F('points') - points)
+
+        if updated_count == 0:
+            # Race condition occurred - another request took the points
+            return Response({
+                'success': False,
+                'message': 'Insufficient points to process this transaction',
+                'error': {
+                    'code': 'INSUFFICIENT_POINTS',
+                    'message': 'Insufficient points to process this transaction',
+                    'details': {
+                        'points': ['Insufficient points to process this transaction']
+                    }
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Refresh wallet to get updated points
+        wallet.refresh_from_db()
 
         # Create a transaction
-        transaction = WalletTransaction.objects.create(
+        transaction_obj = WalletTransaction.objects.create(
             wallet=wallet,
             user=request.user,
             transaction_type='redeem',
@@ -502,6 +434,6 @@ class RedeemPointsView(generics.GenericAPIView):
         return Response({
             'success': True,
             'message': f'Successfully redeemed {points} points for {option}',
-            'transaction_id': transaction.transaction_id,
+            'transaction_id': transaction_obj.transaction_id,
             'wallet': WalletSerializer(wallet).data
         }, status=status.HTTP_201_CREATED)
