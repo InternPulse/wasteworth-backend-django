@@ -1,11 +1,7 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
-from django.contrib.auth.hashers import make_password
-from django.utils import timezone
 import uuid
 import string
-import random
-import sys
 
 
 class UserManager(BaseUserManager):
@@ -49,7 +45,6 @@ class User(AbstractUser):
     is_verified = models.BooleanField(default=False)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='disposer')
     address_location = models.JSONField(null=True, blank=True)
-    wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     referral_code = models.CharField(max_length=10, unique=True, blank=True)
     referred_by = models.CharField(max_length=10, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -70,7 +65,23 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
     def generate_referral_code(self):
-        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        """
+        Generate a cryptographically secure unique referral code.
+        Uses secrets module and checks for collisions.
+        """
+        import secrets
+        max_attempts = 10
+
+        for _ in range(max_attempts):
+            # Use secrets for cryptographically secure random generation
+            code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+
+            # Check for collision
+            if not User.objects.filter(referral_code=code).exists():
+                return code
+
+        # Fallback: use longer code if collision persists
+        return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(12))
 
     def __str__(self):
         return f"{self.name} ({self.email})"
