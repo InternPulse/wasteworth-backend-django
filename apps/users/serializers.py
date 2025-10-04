@@ -216,10 +216,17 @@ class UpdatePasswordSerializer(serializers.Serializer):
 # User Profile Management
 # ------------------------------
 class UserProfileSerializer(serializers.ModelSerializer):
+    # Fetch wallet balance from related Wallet model (single source of truth)
+    wallet_balance = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = ['id', 'name', 'email', 'phone', 'role', 'address_location', 'wallet_balance', 'referral_code', 'created_at']
         read_only_fields = ['id', 'referral_code', 'created_at', 'wallet_balance']
+
+    def get_wallet_balance(self, obj):
+        """Get balance from related Wallet model."""
+        return str(obj.wallet.balance) if hasattr(obj, 'wallet') else "0.00"
 
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
