@@ -26,22 +26,9 @@ class UserSignupSerializer(serializers.ModelSerializer):
 
     def validate_password(self, value):
         """Comprehensive password validation with detailed feedback"""
-        errors = []
+        from utils.validators import validate_password_strength
 
-        # Length check
-        if len(value) < 8:
-            errors.append("Password must be at least 8 characters long")
-
-        # Character requirements
-        if not re.search(r'[A-Z]', value):
-            errors.append("Password must contain at least one uppercase letter")
-        if not re.search(r'[a-z]', value):
-            errors.append("Password must contain at least one lowercase letter")
-        if not re.search(r'\d', value):
-            errors.append("Password must contain at least one number")
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
-            errors.append("Password must contain at least one special character")
-
+        errors = validate_password_strength(value)
         if errors:
             raise serializers.ValidationError(errors)
         return value
@@ -157,22 +144,9 @@ class ResetPasswordSerializer(serializers.Serializer):
 
     def validate_new_password(self, value):
         """Comprehensive password validation with detailed feedback"""
-        errors = []
+        from utils.validators import validate_password_strength
 
-        # Length check
-        if len(value) < 8:
-            errors.append("Password must be at least 8 characters long")
-
-        # Character requirements
-        if not re.search(r'[A-Z]', value):
-            errors.append("Password must contain at least one uppercase letter")
-        if not re.search(r'[a-z]', value):
-            errors.append("Password must contain at least one lowercase letter")
-        if not re.search(r'\d', value):
-            errors.append("Password must contain at least one number")
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
-            errors.append("Password must contain at least one special character")
-
+        errors = validate_password_strength(value)
         if errors:
             raise serializers.ValidationError(errors)
         return value
@@ -216,10 +190,17 @@ class UpdatePasswordSerializer(serializers.Serializer):
 # User Profile Management
 # ------------------------------
 class UserProfileSerializer(serializers.ModelSerializer):
+    # Fetch wallet balance from related Wallet model (single source of truth)
+    wallet_balance = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = ['id', 'name', 'email', 'phone', 'role', 'address_location', 'wallet_balance', 'referral_code', 'created_at']
         read_only_fields = ['id', 'referral_code', 'created_at', 'wallet_balance']
+
+    def get_wallet_balance(self, obj):
+        """Get balance from related Wallet model."""
+        return str(obj.wallet.balance) if hasattr(obj, 'wallet') else "0.00"
 
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
