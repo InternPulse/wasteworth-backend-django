@@ -12,7 +12,7 @@ from utils.rate_limiter import rate_limit, user_key
 
 # Import error handler if it exists, following the same pattern as users/views.py
 try:
-    from utils.error_handler import ErrorCodes, ERROR_MESSAGES
+    from utils.error_handler import ErrorCodes, ERROR_MESSAGES, error_response
 except ImportError:
     # Fallback error handling if utils.error_handler doesn't exist
     class ErrorCodes:
@@ -84,16 +84,7 @@ class WalletBalanceView(generics.GenericAPIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error retrieving wallet for user {request.user.email}: {str(e)}")
-            return Response({
-                'success': False,
-                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Failed to retrieve wallet information.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Error retrieving wallet for user {request.user.email}", e)
 
 
 # GET /api/v1/wallet/summary/
@@ -162,16 +153,7 @@ class WalletSummaryView(generics.GenericAPIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error retrieving wallet summary for user {request.user.email}: {str(e)}")
-            return Response({
-                'success': False,
-                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Failed to retrieve wallet summary.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Error retrieving wallet summary for user {request.user.email}", e)
 
 
 # ------------------------------
@@ -243,15 +225,7 @@ class WalletTransactionsView(generics.ListAPIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error listing transactions for user {request.user.email}: {str(e)}")
-            return Response({
-                'success': False,
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Failed to retrieve transactions.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Error listing transactions for user {request.user.email}", e)
 
 
 # GET /api/v1/wallet/transactions/<transaction_id>/
@@ -292,15 +266,7 @@ class WalletTransactionDetailView(generics.GenericAPIView):
                 }
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving transaction {transaction_id} for user {request.user.email}: {str(e)}")
-            return Response({
-                'success': False,
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Failed to retrieve transaction details.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Error retrieving transaction {transaction_id} for user {request.user.email}", e)
 
 
 # ------------------------------
@@ -383,15 +349,7 @@ def wallet_stats(request):
             }
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        logger.error(f"Error retrieving wallet stats for user {request.user.email}: {str(e)}")
-        return Response({
-            'success': False,
-            'error': {
-                'code': ErrorCodes.SERVER_ERROR,
-                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                'details': {'error': ['Failed to retrieve wallet statistics.']}
-            }
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return error_response(logger, f"Error retrieving wallet stats for user {request.user.email}", e)
     
 
 class RedemptionOptionsView(generics.GenericAPIView):

@@ -188,6 +188,35 @@ def get_frontend_friendly_message(original_data, fallback_message):
     return fallback_message
 
 
+def error_response(logger, message, exception, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR):
+    """
+    Create a consistent error response for server errors.
+
+    Args:
+        logger: Logger instance to log the error
+        message: Descriptive message for logging (e.g., "Error retrieving wallet")
+        exception: The caught exception
+        status_code: HTTP status code (default: 500)
+
+    Returns:
+        Response: Formatted error response
+
+    Example:
+        except Exception as e:
+            return error_response(logger, "Error retrieving wallet", e)
+    """
+    logger.error(f"{message}: {str(exception)}")
+
+    return Response({
+        'success': False,
+        'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
+        'error': {
+            'code': ErrorCodes.SERVER_ERROR,
+            'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR]
+        }
+    }, status=status_code)
+
+
 def custom_exception_handler(exc, context):
     """Custom exception handler that formats all errors consistently"""
 
