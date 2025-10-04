@@ -26,22 +26,9 @@ class UserSignupSerializer(serializers.ModelSerializer):
 
     def validate_password(self, value):
         """Comprehensive password validation with detailed feedback"""
-        errors = []
+        from utils.validators import validate_password_strength
 
-        # Length check
-        if len(value) < 8:
-            errors.append("Password must be at least 8 characters long")
-
-        # Character requirements
-        if not re.search(r'[A-Z]', value):
-            errors.append("Password must contain at least one uppercase letter")
-        if not re.search(r'[a-z]', value):
-            errors.append("Password must contain at least one lowercase letter")
-        if not re.search(r'\d', value):
-            errors.append("Password must contain at least one number")
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
-            errors.append("Password must contain at least one special character")
-
+        errors = validate_password_strength(value)
         if errors:
             raise serializers.ValidationError(errors)
         return value
@@ -157,22 +144,9 @@ class ResetPasswordSerializer(serializers.Serializer):
 
     def validate_new_password(self, value):
         """Comprehensive password validation with detailed feedback"""
-        errors = []
+        from utils.validators import validate_password_strength
 
-        # Length check
-        if len(value) < 8:
-            errors.append("Password must be at least 8 characters long")
-
-        # Character requirements
-        if not re.search(r'[A-Z]', value):
-            errors.append("Password must contain at least one uppercase letter")
-        if not re.search(r'[a-z]', value):
-            errors.append("Password must contain at least one lowercase letter")
-        if not re.search(r'\d', value):
-            errors.append("Password must contain at least one number")
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
-            errors.append("Password must contain at least one special character")
-
+        errors = validate_password_strength(value)
         if errors:
             raise serializers.ValidationError(errors)
         return value

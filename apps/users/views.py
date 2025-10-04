@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Import error handler if it exists, otherwise create fallback
 try:
-    from utils.error_handler import ErrorCodes, ERROR_MESSAGES
+    from utils.error_handler import ErrorCodes, ERROR_MESSAGES, error_response
 except ImportError:
     # Fallback error handling if utils.error_handler doesn't exist
     class ErrorCodes:
@@ -125,15 +125,7 @@ def logout(request):
             }
         }, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
-        logger.error(f"Token refresh failed: {str(e)}")
-        return Response({
-            'success': False,
-            'error': {
-                'code': ErrorCodes.SERVER_ERROR,
-                'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                'details': {'error': ['An unexpected error occurred during logout.']}
-            }
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return error_response(logger, "Token refresh failed", e)
 
 
 # ------------------------------
@@ -292,12 +284,13 @@ class UserDashboardView(generics.GenericAPIView):
             auth_token: JWT token from the authenticated user (optional)
 
         Returns:
-            tuple: (dict with 'total_listings' and 'sold_listings', node_status string)
-                   Returns default values (0, 0) and 'unavailable' if Node service fails
+            tuple: (dict with 'total_listings', 'sold_listings', 'recent_listings', node_status string)
+                Returns defaults if Node service fails
         """
         default_data = {
             'total_listings': 0,
-            'sold_listings': 0
+            'sold_listings': 0,
+            'recent_posts': []
         }
 
         # Check if Node service is configured
@@ -343,7 +336,8 @@ class UserDashboardView(generics.GenericAPIView):
             # We map them to: total_listings, sold_listings
             listing_data = {
                 'total_listings': data.get('total_waste_posted', data.get('total_listings', 0)),
-                'sold_listings': data.get('total_waste_completed', data.get('sold_listings', 0))
+                'sold_listings': data.get('total_waste_completed', data.get('sold_listings', 0)),
+                'recent_listings': data.get('recent_listing', []) 
             }
 
             # Log success
@@ -605,12 +599,4 @@ class ResetPasswordView(generics.GenericAPIView):
                 }
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Password reset failed for {email}: {str(e)}")
-            return Response({
-                'success': False,
-                'error': {
-                    'code': ErrorCodes.SERVER_ERROR,
-                    'message': ERROR_MESSAGES[ErrorCodes.SERVER_ERROR],
-                    'details': {'error': ['Password reset failed. Please try again.']}
-                }
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(logger, f"Password reset failed for {email}", e)
