@@ -1,30 +1,9 @@
-import redis
-from django.conf import settings
+from django.core.cache import cache
 from django.http import JsonResponse
 from functools import wraps
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-try:
-    redis_client = redis.Redis(
-        host=settings.RQ_QUEUES['default']['HOST'],
-        port=settings.RQ_QUEUES['default']['PORT'],
-        db=0,
-        password=settings.RQ_QUEUES['default']['PASSWORD'] if settings.RQ_QUEUES['default']['PASSWORD'] else None,
-        decode_responses=True,
-        socket_connect_timeout=5
-    )
-    
-    redis_client.ping()
-    REDIS_AVAILABLE=True
-    logger.info("Redis connection successful for rate limiting")
-
-except Exception as e:
-    REDIS_AVAILABLE = False
-    logger.warning(f"Redis not available for rate limiting: {str(e)}")
-    redis_client = None
 
 
 def rate_limit(key_func,rate,per,block=True):
@@ -48,8 +27,6 @@ def rate_limit(key_func,rate,per,block=True):
         @wraps(view_func)
         def wrapper(*args, **kwargs):
             # Handle both function-based views and class-based view methods
-            # Function-based: wrapper(request, *args, **kwargs)
-            # Class-based: wrapper(self, request, *args, **kwargs)
             if args and hasattr(args[0], 'META'):
                 # First arg is request (function-based view)
                 request = args[0]
@@ -61,23 +38,21 @@ def rate_limit(key_func,rate,per,block=True):
                 logger.warning("Rate limiting skipped - could not find request object")
                 return view_func(*args, **kwargs)
 
-            if not REDIS_AVAILABLE:
-                logger.debug("Rate limiting skipped - Redis not available")
-                return view_func(*args, **kwargs)
 
             try:
                 limit_key = key_func(request)
-                current = redis_client.get(limit_key)
+                current = cache.get(limit_key)
 
                 if current is None:
                     # First request - set counter and TTL
-                    redis_client.setex(limit_key, per, 1)
+                    cache.set(limit_key, 1, per)
                     logger.debug(f"Rate limit initialized for key: {limit_key}")
 
                 elif int(current) >= rate:
                     # Rate limit exceeded
-                    ttl = redis_client.ttl(limit_key)
-                    logger.warning(f"Rate limit exceeded for key: {limit_key}, TTL: {ttl}s")
+                    # Use configured period as TTL estimate
+                    ttl = per
+                    logger.warning(f"Rate limit exceeded for key: {limit_key}, retry after: {ttl}s")
 
                     if block:
                         # Return 429 response directly using JsonResponse
@@ -97,8 +72,13 @@ def rate_limit(key_func,rate,per,block=True):
                         return response
                 else:
                     # Increment counter
-                    redis_client.incr(limit_key)
-                    logger.debug(f"Rate limit counter incremented for key: {limit_key}")
+                    try:
+                        cache.incr(limit_key)
+                        logger.debug(f"Rate limit counter incremented for key: {limit_key}")
+                    except ValueError:
+                        # Key doesn't exist or expired, reset it
+                        cache.set(limit_key, 1, per)
+                        logger.debug(f"Rate limit key expired, reinitialized: {limit_key}")
 
             except Exception as e:
                 # Log other errors but allow request (fail open)
