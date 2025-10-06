@@ -32,7 +32,7 @@ class Listing(models.Model):
     image_url = models.URLField(max_length=500, null=True, blank=True)
     final_reward = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     pickup_location = models.JSONField()
-    phone = models.CharField(max_length=20, null=True, blank=True)
+    phone = models.CharField(max_length=20, null=True, blank=True,unique=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
