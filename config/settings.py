@@ -161,7 +161,8 @@ INSTALLED_APPS = [
     'apps.otp',            # Added OTP app
     'apps.referral',       # Added referral app
     'apps.marketplace',    # Added marketplace app
-    "cloudinary", 
+    'apps.contact',        # Added contact app
+    "cloudinary",
     "cloudinary_storage",
 ]
 
