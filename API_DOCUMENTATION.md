@@ -1288,6 +1288,184 @@ FRONTEND_URL=https://wasteworth.com
 
 ---
 
+## 📧 Contact Us Endpoint
+
+### Overview
+The Contact Us endpoint allows users (both authenticated and unauthenticated) to send messages to the WasteWorth support team. When a message is submitted, the system automatically sends two emails:
+1. **Admin Notification** - Notifies the support team at info@wasteworth.com
+2. **Auto-Reply** - Confirms receipt to the user
+
+### Submit Contact Message
+
+**POST** `/contact/`
+**Authentication Required:** No (publicly accessible)
+
+Accepts contact form submissions and sends automated emails.
+
+**Request Body:**
+```json
+{
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com",
+    "message": "I'd love to know more about your recycling services.",
+    "heard_about": "Instagram"
+}
+```
+
+**Field Requirements:**
+- `first_name` (required) - User's first name
+- `last_name` (optional) - User's last name
+- `email` (required) - Valid email address
+- `message` (required) - Minimum 10 characters
+- `heard_about` (optional) - How they heard about WasteWorth
+
+**Success Response (201):**
+```json
+{
+    "id": 1,
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com",
+    "message": "I'd love to know more about your recycling services.",
+    "heard_about": "Instagram",
+    "created_at": "2025-10-07T13:25:43Z"
+}
+```
+
+**Validation Error Response (400):**
+```json
+{
+    "first_name": ["First name is required."],
+    "email": ["Email address is required."],
+    "message": ["Message must be at least 10 characters long."]
+}
+```
+
+### Email Notifications
+
+**Admin Email (to info@wasteworth.com):**
+```
+Subject: New Contact Message from Jane Doe
+
+You have received a new contact form submission.
+
+From: Jane Doe
+Email: jane@example.com
+Heard about us: Instagram
+
+Message:
+I'd love to know more about your recycling services.
+
+---
+This is an automated notification from WasteWorth Contact Form.
+```
+
+**Auto-Reply Email (to user):**
+```
+Subject: Thanks for contacting WasteWorth
+
+Hello Jane,
+
+Thank you for reaching out to WasteWorth. We've received your message and our support team will get back to you shortly.
+
+Your message:
+"I'd love to know more about your recycling services."
+
+We typically respond within 24-48 hours during business days.
+
+Best regards,
+The WasteWorth Team
+
+---
+This is an automated confirmation email. Please do not reply to this email.
+```
+
+### Example Usage
+
+**JavaScript/Fetch:**
+```javascript
+fetch('https://wasteworth-backend-django.onrender.com/api/v1/contact/', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        first_name: 'Jane',
+        last_name: 'Doe',
+        email: 'jane@example.com',
+        message: "I'd love to know more about your recycling services.",
+        heard_about: 'Instagram'
+    })
+})
+.then(response => response.json())
+.then(data => {
+    console.log('Message sent successfully:', data);
+})
+.catch(error => {
+    console.error('Error sending message:', error);
+});
+```
+
+**cURL:**
+```bash
+curl -X POST https://wasteworth-backend-django.onrender.com/api/v1/contact/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com",
+    "message": "I would love to know more about your recycling services.",
+    "heard_about": "Instagram"
+  }'
+```
+
+### Error Handling
+
+**Missing Required Fields:**
+```json
+{
+    "first_name": ["This field is required."],
+    "message": ["This field is required."]
+}
+```
+
+**Invalid Email:**
+```json
+{
+    "email": ["Enter a valid email address."]
+}
+```
+
+**Message Too Short:**
+```json
+{
+    "message": ["Message must be at least 10 characters long."]
+}
+```
+
+### Email Configuration
+
+Emails are sent using Django's email backend configured in settings. If email is not configured or fails, the endpoint will still return success (emails fail silently) to ensure the contact form doesn't break if email service is down.
+
+**Email Settings Required:**
+- `DEFAULT_FROM_EMAIL` - Sender email address
+- `EMAIL_HOST` - SMTP server
+- `EMAIL_PORT` - SMTP port
+- `EMAIL_HOST_USER` - SMTP username
+- `EMAIL_HOST_PASSWORD` - SMTP password
+
+### Notes
+
+- ✅ No authentication required - publicly accessible
+- ✅ Automatic email notifications to admin
+- ✅ Automatic confirmation email to user
+- ✅ Emails fail silently to prevent errors
+- ✅ Data stored in database for admin review
+- ✅ Accessible via Django admin panel
+
+---
+
 ## 🔍 Status Codes
 
 | Code | Description |
@@ -1342,4 +1520,5 @@ curl -X GET "https://wasteworth-backend-django.onrender.com/api/v1/wallet/transa
 ✅ Points-first eco-system with referral rewards
 ✅ **Referral links** - Easy sharing with automatic code application
 ✅ **Backward compatible** - Supports both referral links and manual codes
+✅ **Contact form** - Public endpoint with automated email notifications
 ✅ Production-ready with proper authentication and validation
