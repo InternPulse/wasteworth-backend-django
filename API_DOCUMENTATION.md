@@ -797,24 +797,17 @@ Retrieves the user's wallet information including cash balance and points.
 ### 2. List Wallet Transactions
 **GET** `/wallet/transactions/`
 **Authentication Required:** Yes
+**Rate Limit:** 100 requests per minute per user
 
-Retrieves paginated list of user's wallet transactions with filtering support.
+Retrieves paginated list of user's wallet transactions ordered by most recent first.
 
 **Query Parameters:**
-- `transaction_type` - Filter by type (`referral_reward`, `deposit`, etc.)
-- `payment_method` - Filter by payment method (`bank`, `system`, etc.)
-- `status` - Filter by status (`success`, `pending`, `failed`)
-- `date_from` - Filter from date (ISO format)
-- `date_to` - Filter until date (ISO format)
-- `min_amount` - Minimum transaction amount
-- `max_amount` - Maximum transaction amount
-- `search` - Search in description or reference
-- `page` - Page number
-- `page_size` - Items per page (max 100)
+- `page` - Page number (default: 1)
+- `page_size` - Items per page (default: 20, max: 100)
 
-**Example: Get all referral reward transactions**
+**Example Request:**
 ```bash
-GET /wallet/transactions/?transaction_type=referral_reward
+GET /wallet/transactions/?page=1&page_size=20
 ```
 
 **Response (200):**
@@ -849,9 +842,35 @@ GET /wallet/transactions/?transaction_type=referral_reward
 }
 ```
 
-**Example: Get cash transactions with amount filter**
+**Example: Paginated Request**
 ```bash
-GET /wallet/transactions/?transaction_type=deposit&min_amount=50.00
+GET /wallet/transactions/?page=2&page_size=50
+```
+
+**Error Response - Wallet Not Found (404):**
+```json
+{
+    "success": false,
+    "error": {
+        "code": "NOT_FOUND",
+        "message": "Wallet not found for authenticated user.",
+        "details": {
+            "wallet": ["No wallet associated with your account."]
+        }
+    }
+}
+```
+
+**Error Response - Rate Limit Exceeded (429):**
+```json
+{
+    "success": false,
+    "message": "Rate limit exceeded. Please try again later.",
+    "error": {
+        "code": "RATE_LIMIT_EXCEEDED",
+        "message": "You have exceeded the rate limit of 100 requests per minute."
+    }
+}
 ```
 
 ### Transaction Examples
@@ -1105,8 +1124,8 @@ curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/users/user-das
 curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/wallet/balance/ \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 
-# Test wallet transactions with filtering
-curl -X GET "https://wasteworth-backend-django.onrender.com/api/v1/wallet/transactions/?transaction_type=referral_reward" \
+# Test wallet transactions with pagination
+curl -X GET "https://wasteworth-backend-django.onrender.com/api/v1/wallet/transactions/?page=1&page_size=20" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 
 ```
