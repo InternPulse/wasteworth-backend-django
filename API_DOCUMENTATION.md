@@ -85,6 +85,24 @@ PATCH /users/update-user/ (with sensitive field)
 PATCH /users/update-user/ (with same data + OTP)
 ```
 
+### 4. Referral System
+```bash
+# Get your referral link from dashboard
+GET /users/user-dashboard/
+# Returns: referral_code and referral_link
+
+# Share link: https://yourapp.com/signup?ref=ABC123DE
+# New user clicks link → Frontend extracts ref parameter
+
+# New user signs up with referral
+POST /users/signup/
+{
+  "referred_by": "ABC123DE"  // Extracted from URL
+}
+# Referrer gets 100 points immediately
+# Referrer gets BONUS 100 points on referee's first transaction
+```
+
 ---
 
 ## 📋 All Endpoints
@@ -301,7 +319,9 @@ Gets authenticated user's profile information.
         "lng": -74.0060
     },
     "wallet_balance": "150.00",
+    "points": 250,
     "referral_code": "ABC123DEF",
+    "referral_link": "https://wasteworth-backend-django.onrender.com/signup?ref=ABC123DEF",
     "created_at": "2025-01-15T10:30:00Z"
 }
 ```
@@ -1089,6 +1109,185 @@ All wallet endpoints follow the same error format:
 
 ---
 
+## 🎁 Referral System
+
+### Overview
+The referral system rewards users for inviting others to join the platform. Users can share either referral codes or referral links.
+
+### How It Works
+
+**1. Every user gets:**
+- A unique `referral_code` (e.g., `ABC123DE`)
+- A shareable `referral_link` (e.g., `https://wasteworth.com/signup?ref=ABC123DE`)
+
+**2. Sharing Options:**
+
+**Option A: Share Referral Link (Recommended)**
+```
+User shares: https://wasteworth.com/signup?ref=ABC123DE
+New user clicks link → Automatically applies referral during signup
+```
+
+**Option B: Share Referral Code (Backward Compatible)**
+```
+User shares code: "ABC123DE"
+New user manually enters code in signup form
+```
+
+**3. Reward Structure:**
+- **On Signup**: Referrer gets **100 points** immediately when referee verifies their account
+- **On First Transaction**: Referrer gets **BONUS 100 points** when referee completes their first transaction
+- **Total Potential**: **200 points per successful referral**
+
+### Getting Your Referral Link
+
+**Request:**
+```bash
+GET /api/v1/users/user-dashboard/
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+**Response:**
+```json
+{
+    "id": "uuid",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "referral_code": "ABC123DE",
+    "referral_link": "https://wasteworth.com/signup?ref=ABC123DE",
+    ...
+}
+```
+
+### Using a Referral Link (Frontend Implementation)
+
+**Step 1: Extract Referral from URL**
+```javascript
+// User clicks: https://wasteworth.com/signup?ref=ABC123DE
+
+const urlParams = new URLSearchParams(window.location.search);
+const referralCode = urlParams.get('ref'); // "ABC123DE"
+```
+
+**Step 2: Include in Signup Request**
+```javascript
+POST /api/v1/users/signup/
+{
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "password": "SecurePass123!",
+    "confirm_password": "SecurePass123!",
+    "phone": "+1234567890",
+    "role": "disposer",
+    "referred_by": "ABC123DE"  // ← Include extracted code
+}
+```
+
+**Step 3: Automatic Reward Distribution**
+- System finds referrer by code
+- Creates referral record
+- Awards 100 points to referrer immediately
+- Tracks for future bonus (100 points on first transaction)
+
+### Referral Field in Signup
+
+**Field Name:** `referred_by` (optional)
+**Format:** 8-character alphanumeric code
+**Example:** `ABC123DE`
+
+```json
+{
+    "name": "New User",
+    "email": "newuser@example.com",
+    "password": "StrongPass123!",
+    "confirm_password": "StrongPass123!",
+    "phone": "+1234567890",
+    "role": "disposer",
+    "referred_by": "ABC123DE"  // Optional referral code
+}
+```
+
+### Referral Validation
+
+**Valid Referral:**
+```json
+// Signup succeeds, referrer gets points
+{
+    "success": true,
+    "message": "Account created successfully...",
+    "user_id": "uuid",
+    "email": "newuser@example.com"
+}
+```
+
+**Invalid Referral Code:**
+```json
+// Signup still succeeds, but no referral reward given
+// Invalid code is silently ignored (logged for monitoring)
+{
+    "success": true,
+    "message": "Account created successfully...",
+    "user_id": "uuid",
+    "email": "newuser@example.com"
+}
+```
+
+### Best Practices
+
+**For Frontend Developers:**
+1. Extract `ref` parameter from URL on signup page
+2. Pre-fill or auto-include in signup form
+3. Show user whose referral link they're using (optional UX enhancement)
+4. Don't block signup if referral code is invalid
+
+**For Users:**
+1. Share referral link for easiest experience
+2. Fallback to sharing code if link doesn't work
+3. Track referrals via wallet transaction history (transaction type: `referral_reward`)
+
+### Tracking Referrals
+
+**Check Referral Rewards:**
+```bash
+GET /api/v1/wallet/transactions/
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+**Filter for Referral Rewards:**
+```json
+{
+    "results": [
+        {
+            "transaction_type": "referral_reward",
+            "points": 100,
+            "description": "Referral reward: Jane Doe signed up using your code",
+            "status": "success"
+        },
+        {
+            "transaction_type": "referral_reward",
+            "points": 100,
+            "description": "Referral bonus: Jane Doe completed their first transaction",
+            "status": "success"
+        }
+    ]
+}
+```
+
+### Configuration
+
+**Environment Variable:**
+```bash
+# Set your frontend URL for referral links
+FRONTEND_URL=https://wasteworth.com
+```
+
+**Default Behavior:**
+- Development: Uses first ALLOWED_HOST with `http://`
+- Production: Uses first ALLOWED_HOST with `https://`
+- Can be overridden via `FRONTEND_URL` environment variable
+
+---
+
 ## 🔍 Status Codes
 
 | Code | Description |
@@ -1141,4 +1340,6 @@ curl -X GET "https://wasteworth-backend-django.onrender.com/api/v1/wallet/transa
 ✅ Wallet management with points and cash
 ✅ Transaction filtering and listing
 ✅ Points-first eco-system with referral rewards
+✅ **Referral links** - Easy sharing with automatic code application
+✅ **Backward compatible** - Supports both referral links and manual codes
 ✅ Production-ready with proper authentication and validation

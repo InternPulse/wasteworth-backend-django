@@ -83,6 +83,34 @@ class User(AbstractUser):
         # Fallback: use longer code if collision persists
         return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(12))
 
+    def get_referral_link(self, domain=None):
+        """
+        Generate a referral link using the user's referral code.
+
+        Args:
+            domain (str, optional): The frontend domain. If not provided, uses settings.FRONTEND_URL
+
+        Returns:
+            str: Full referral link (e.g., "https://wasteworth.com/signup?ref=ABC123DE")
+
+        Example:
+            >>> user.get_referral_link()
+            'https://wasteworth.com/signup?ref=ABC123DE'
+
+            >>> user.get_referral_link('https://app.wasteworth.com')
+            'https://app.wasteworth.com/signup?ref=ABC123DE'
+        """
+        from django.conf import settings
+
+        # Use provided domain or fall back to settings
+        base_url = domain or getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+
+        # Remove trailing slash if present
+        base_url = base_url.rstrip('/')
+
+        # Construct referral link
+        return f"{base_url}/signup?ref={self.referral_code}"
+
     def __str__(self):
         return f"{self.name} ({self.email})"
 
