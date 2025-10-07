@@ -456,3 +456,11 @@ AXES_CACHE = 'default'
 # ------------------------------
 NODE_SERVICE_URL = config('NODE_SERVICE_URL', default='http://localhost:3000')
 INTERNAL_API_KEY = config('INTERNAL_API_KEY', default='')
+
+# ------------------------------
+# Frontend URL Configuration (for referral links)
+# ------------------------------
+# Use the first ALLOWED_HOST for generating referral links
+# In production, set FRONTEND_URL env variable to your actual domain
+_default_frontend = f"http://{ALLOWED_HOSTS[0]}" if DEBUG else f"https://{ALLOWED_HOSTS[0]}"
+FRONTEND_URL = config('FRONTEND_URL', default=_default_frontend)

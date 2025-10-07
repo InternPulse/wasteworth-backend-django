@@ -192,15 +192,25 @@ class UpdatePasswordSerializer(serializers.Serializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     # Fetch wallet balance from related Wallet model (single source of truth)
     wallet_balance = serializers.SerializerMethodField()
+    points = serializers.SerializerMethodField()
+    referral_link = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'name', 'email', 'phone', 'role', 'address_location', 'wallet_balance', 'referral_code', 'created_at']
-        read_only_fields = ['id', 'referral_code', 'created_at', 'wallet_balance']
+        fields = ['id', 'name', 'email', 'phone', 'role', 'address_location', 'wallet_balance', 'points', 'referral_code', 'referral_link', 'created_at']
+        read_only_fields = ['id', 'referral_code', 'referral_link', 'created_at', 'wallet_balance', 'points']
 
     def get_wallet_balance(self, obj):
         """Get balance from related Wallet model."""
         return str(obj.wallet.balance) if hasattr(obj, 'wallet') else "0.00"
+
+    def get_points(self, obj):
+        """Get points from related Wallet model."""
+        return obj.wallet.points if hasattr(obj, 'wallet') else 0
+
+    def get_referral_link(self, obj):
+        """Generate referral link for the user."""
+        return obj.get_referral_link()
 
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
