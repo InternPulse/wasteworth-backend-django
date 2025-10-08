@@ -50,7 +50,6 @@ def rate_limit(key_func,rate,per,block=True):
 
                 elif int(current) >= rate:
                     # Rate limit exceeded
-                    # Use configured period as TTL estimate
                     ttl = per
                     logger.warning(f"Rate limit exceeded for key: {limit_key}, retry after: {ttl}s")
 
@@ -72,13 +71,8 @@ def rate_limit(key_func,rate,per,block=True):
                         return response
                 else:
                     # Increment counter
-                    try:
-                        cache.incr(limit_key)
-                        logger.debug(f"Rate limit counter incremented for key: {limit_key}")
-                    except ValueError:
-                        # Key doesn't exist or expired, reset it
-                        cache.set(limit_key, 1, per)
-                        logger.debug(f"Rate limit key expired, reinitialized: {limit_key}")
+                    cache.incr(limit_key)
+                    logger.debug(f"Rate limit counter incremented for key: {limit_key}")
 
             except Exception as e:
                 # Log other errors but allow request (fail open)
