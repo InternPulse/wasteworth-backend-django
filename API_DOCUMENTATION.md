@@ -88,7 +88,7 @@ PATCH /users/update-user/ (with same data + OTP)
 ### 4. Referral System
 ```bash
 # Get your referral link from dashboard
-GET /users/user-dashboard/
+GET /users/disposer-dashboard/  # or /users/recycler-dashboard/
 # Returns: referral_code and referral_link
 
 # Share link: https://yourapp.com/signup?ref=ABC123DE
@@ -300,31 +300,121 @@ Blacklists the refresh token to logout the user securely.
 
 ### 👤 User Profile Management
 
-#### 5. User Dashboard
-**GET** `/users/user-dashboard/`
+#### 5. Disposer Dashboard
+**GET** `/users/disposer-dashboard/`
 **Authentication Required:** Yes
+**Rate Limit:** 30 requests per minute per user
 
-Gets authenticated user's profile information.
+Gets disposer user's dashboard with profile data and waste management statistics. All data is fetched directly from the database using Django ORM queries.
+
+**What it returns:**
+- User profile information
+- Total listings created by disposer
+- Number of sold listings (escrow_status='released')
+- Recent 5 posts by the disposer
 
 **Success Response (200):**
 ```json
 {
-    "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
-    "name": "John Doe",
-    "email": "user@example.com",
-    "phone": "+1234567890",
-    "role": "disposer",
-    "address_location": {
-        "lat": 40.7128,
-        "lng": -74.0060
+    "user": {
+        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
+        "name": "John Doe",
+        "email": "user@example.com",
+        "phone": "+1234567890",
+        "role": "disposer",
+        "address_location": {
+            "lat": 40.7128,
+            "lng": -74.0060
+        },
+        "wallet_balance": "150.00",
+        "referral_code": "ABC123DEF",
+        "referral_link": "https://wasteworth-backend-django.onrender.com/signup?ref=ABC123DEF",
+        "created_at": "2025-01-15T10:30:00Z"
     },
-    "wallet_balance": "150.00",
-    "points": 250,
-    "referral_code": "ABC123DEF",
-    "referral_link": "https://wasteworth-backend-django.onrender.com/signup?ref=ABC123DEF",
-    "created_at": "2025-01-15T10:30:00Z"
+    "stats": {
+        "total_listings": 12,
+        "sold_listings": 8,
+        "recent_posts": [
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "title": "Plastic bottles for recycling",
+                "waste_type": "plastic",
+                "quantity": 25.5,
+                "status": "pending",
+                "reward_estimate": "500.00",
+                "image_url": "https://example.com/image.jpg",
+                "created_at": "2025-01-15T14:30:00Z"
+            }
+        ]
+    }
 }
 ```
+
+#### 6. Recycler Dashboard
+**GET** `/users/recycler-dashboard/`
+**Authentication Required:** Yes
+**Rate Limit:** 30 requests per minute per user
+
+Gets recycler user's dashboard with profile data and collection statistics. All data is fetched directly from the database using Django ORM queries.
+
+**What it returns:**
+- User profile information
+- Total kg of waste collected (from completed marketplace transactions)
+- Total points accumulated in wallet
+- Recent 5 system-wide pending/accepted listings available for pickup
+
+**Success Response (200):**
+```json
+{
+    "user": {
+        "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
+        "name": "Jane Smith",
+        "email": "recycler@example.com",
+        "phone": "+1234567890",
+        "role": "recycler",
+        "address_location": {
+            "lat": 40.7128,
+            "lng": -74.0060
+        },
+        "wallet_balance": "500.00",
+        "referral_code": "XYZ789ABC",
+        "referral_link": "https://wasteworth-backend-django.onrender.com/signup?ref=XYZ789ABC",
+        "created_at": "2025-01-10T10:30:00Z"
+    },
+    "stats": {
+        "total_kg_collected": 156.75,
+        "total_points": 1250,
+        "recent_posts": [
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "title": "Glass bottles collection",
+                "waste_type": "glass",
+                "quantity": 30.0,
+                "status": "accepted",
+                "reward_estimate": "600.00",
+                "image_url": "https://example.com/image.jpg",
+                "pickup_location": {
+                    "lat": 40.7580,
+                    "lng": -73.9855
+                },
+                "created_at": "2025-01-15T12:00:00Z"
+            }
+        ]
+    }
+}
+```
+
+#### 7. User Dashboard (Legacy - Backward Compatibility)
+**GET** `/users/user-dashboard/`
+**Authentication Required:** Yes
+
+⚠️ **DEPRECATED:** This endpoint is maintained for backward compatibility only. It currently maps to the Disposer Dashboard.
+
+**New apps should use:**
+- `/users/disposer-dashboard/` for disposer users
+- `/users/recycler-dashboard/` for recycler users
+
+Returns the same response as Disposer Dashboard (see above).
 
 **Error Response (401):**
 ```json
@@ -340,7 +430,7 @@ Gets authenticated user's profile information.
 }
 ```
 
-#### 6. Update User Profile (Two-Step Process)
+#### 8. Update User Profile (Two-Step Process)
 **PATCH** `/users/update-user/`
 **Authentication Required:** Yes
 
@@ -765,7 +855,17 @@ await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-
 
 ### Authenticated Request
 ```javascript
-const response = await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/user-dashboard/', {
+// For disposers
+const response = await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/disposer-dashboard/', {
+    method: 'GET',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+    }
+});
+
+// For recyclers
+const response = await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/recycler-dashboard/', {
     method: 'GET',
     headers: {
         'Content-Type': 'application/json',
@@ -1143,7 +1243,12 @@ New user manually enters code in signup form
 
 **Request:**
 ```bash
-GET /api/v1/users/user-dashboard/
+# For disposers
+GET /api/v1/users/disposer-dashboard/
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+# For recyclers
+GET /api/v1/users/recycler-dashboard/
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
 
@@ -1495,7 +1600,8 @@ curl -X POST https://wasteworth-backend-django.onrender.com/api/v1/users/login/ 
   -d '{"email": "test@example.com", "password": "wrongpassword"}'
 
 # Test dashboard without authentication
-curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/users/user-dashboard/
+curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/users/disposer-dashboard/
+curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/users/recycler-dashboard/
 
 # Test wallet endpoints with authentication
 curl -X GET https://wasteworth-backend-django.onrender.com/api/v1/wallet/balance/ \

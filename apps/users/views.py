@@ -267,162 +267,192 @@ class UpdatePasswordView(generics.GenericAPIView):
 # User Profile Management Views (Class-based)
 # ------------------------------
 
-# GET /api/v1/users/user-dashboard/
-class UserDashboardView(generics.GenericAPIView):
+# GET /api/v1/users/disposer-dashboard/
+class DisposerDashboardView(generics.GenericAPIView):
     """
-    User dashboard endpoint that combines user profile data with listing statistics
-    from the Node.js service.
+    NEW Disposer dashboard endpoint that fetches data directly from the database.
+    No Node.js API calls - all data comes from direct ORM queries.
+
+    Returns:
+        - User profile data (from User table - Django managed)
+        - Total listings created by this disposer (from Listing table - Node managed)
+        - Sold listings count (from MarketplaceListing table - Node managed)
+        - Recent 5 posts by this disposer (from Listing table - Node managed)
     """
     permission_classes = [IsAuthenticated]
 
-    def _fetch_listing_data(self, user_id, auth_token=None):
-        """
-        Fetch listing summary from Node.js service.
-
-        Args:
-            user_id: The user ID to fetch listings for
-            auth_token: JWT token from the authenticated user (optional)
-
-        Returns:
-            tuple: (dict with 'total_listings', 'sold_listings', 'recent_listings', node_status string)
-                Returns defaults if Node service fails
-        """
-        default_data = {
-            'total_listings': 0,
-            'sold_listings': 0,
-            'recent_posts': []
-        }
-
-        # Check if Node service is configured
-        if not settings.NODE_SERVICE_URL or not settings.INTERNAL_API_KEY:
-            logger.warning(
-                "Node service not configured. Set NODE_SERVICE_URL and INTERNAL_API_KEY in environment.",
-                extra={'node_status': 'unavailable'}
-            )
-            return default_data, 'unavailable'
-
-        # Check if auth token is provided
-        if not auth_token:
-            logger.warning(
-                "No authentication token provided for Node service request",
-                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
-            )
-            return default_data, 'unavailable'
-
-        try:
-            # Build the URL
-            url = f"{settings.NODE_SERVICE_URL}/api/v1/listings/listingstats"
-
-            # Make request with timeout
-            # Note: headers built inline to avoid storing sensitive data in variables
-            response = requests.get(
-                url,
-                headers={
-                    'Authorization': f'Bearer {auth_token}',
-                    'api_key': f'Bearer {settings.INTERNAL_API_KEY}',
-                    'Content-Type': 'application/json'
-                },
-                timeout=10  # 10 second timeout
-            )
-
-            # Raise exception for 4xx/5xx status codes
-            response.raise_for_status()
-
-            # Parse JSON response
-            data = response.json()
-
-            # Extract listing data with fallback to defaults
-            # Node returns: total_waste_posted, total_waste_completed
-            # We map them to: total_listings, sold_listings
-            listing_data = {
-                'total_listings': data.get('total_waste_posted', data.get('total_listings', 0)),
-                'sold_listings': data.get('total_waste_completed', data.get('sold_listings', 0)),
-                'recent_listings': data.get('recent_listing', []) 
-            }
-
-            # Log success
-            logger.info(
-                f"Successfully fetched listing data for user {user_id}",
-                extra={'node_status': 'ok', 'user_id': str(user_id)}
-            )
-
-            return listing_data, 'ok'
-
-        except requests.exceptions.Timeout:
-            logger.error(
-                f"Timeout fetching listing data for user {user_id} from Node service",
-                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
-            )
-            return default_data, 'unavailable'
-
-        except requests.exceptions.ConnectionError:
-            logger.error(
-                f"Connection error fetching listing data for user {user_id} from Node service",
-                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
-            )
-            return default_data, 'unavailable'
-
-        except requests.exceptions.HTTPError as e:
-            status_code = e.response.status_code if e.response else 'unknown'
-            logger.error(
-                f"HTTP error fetching listing data for user {user_id}: {status_code}",
-                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
-            )
-            return default_data, 'unavailable'
-
-        except (ValueError, KeyError):
-            logger.error(
-                f"Invalid JSON response from Node service for user {user_id}",
-                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
-            )
-            return default_data, 'unavailable'
-
-        except Exception:
-            # Don't log exception details as they may contain sensitive headers
-            logger.error(
-                f"Unexpected error fetching listing data for user {user_id}",
-                extra={'node_status': 'unavailable', 'user_id': str(user_id)}
-            )
-            return default_data, 'unavailable'
-
-    @rate_limit(key_func=user_key('dashboard'),rate=30,per=60)
+    @rate_limit(key_func=user_key('dashboard'), rate=30, per=60)
     def get(self, request):
         """
-        Get user dashboard data including profile and listing statistics.
-
-        Returns user profile data merged with listing data from Node.js service.
-        If Node service fails, returns user profile with default listing values (0).
-
-        Logs node_status internally ('ok' or 'unavailable') for monitoring.
+        Get disposer dashboard data with direct database queries.
         """
-        # Serialize user profile data
-        serializer = UserProfileSerializer(request.user)
+        from apps.listings.models import Listing
+        from apps.marketplace.models import MarketplaceListing
+
+        user = request.user
+
+        # 1. Get user profile data (Django-managed User table)
+        serializer = UserProfileSerializer(user)
         user_data = serializer.data
 
-        # Extract JWT token from Authorization header
-        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-        auth_token = None
-        if auth_header.startswith('Bearer '):
-            auth_token = auth_header.split(' ')[1]
+        # 2. Get total listings created by this disposer (Node-managed Listing table)
+        total_listings = Listing.objects.filter(user_id=user).count()
 
-        # Fetch listing data from Node service with user's JWT token
-        listing_data, node_status = self._fetch_listing_data(request.user.id, auth_token)
+        # 3. Get sold listings count (Node-managed MarketplaceListing table)
+        # A listing is "sold" when it has a marketplace entry with escrow_status='released'
+        sold_listings = MarketplaceListing.objects.filter(
+            listing_id__user_id=user,
+            escrow_status='released'
+        ).count()
 
-        # Log the node status (internal monitoring only, not exposed to frontend)
+        # 4. Get recent 5 posts by this disposer (Node-managed Listing table)
+        recent_posts = Listing.objects.filter(
+            user_id=user
+        ).order_by('-created_at')[:5].values(
+            'id',
+            'title',
+            'waste_type',
+            'quantity',
+            'status',
+            'reward_estimate',
+            'image_url',
+            'created_at'
+        )
+
+        # Convert UUID to string for JSON serialization
+        recent_posts_list = [
+            {
+                'id': str(post['id']),
+                'title': post['title'],
+                'waste_type': post['waste_type'],
+                'quantity': post['quantity'],
+                'status': post['status'],
+                'reward_estimate': str(post['reward_estimate']),
+                'image_url': post['image_url'],
+                'created_at': post['created_at'].isoformat()
+            }
+            for post in recent_posts
+        ]
+
+        # 5. Construct response
+        dashboard_data = {
+            'user': user_data,
+            'stats': {
+                'total_listings': total_listings,
+                'sold_listings': sold_listings,
+                'recent_posts': recent_posts_list
+            }
+        }
+
         logger.info(
-            f"Dashboard request for user {request.user.id}",
+            f"Disposer dashboard accessed by user {user.id}",
             extra={
-                'user_id': str(request.user.id),
-                'node_status': node_status,
-                'endpoint': 'user_dashboard'
+                'user_id': str(user.id),
+                'total_listings': total_listings,
+                'sold_listings': sold_listings
             }
         )
 
-        # Merge user data with listing data (node_status NOT included)
+        return Response(dashboard_data, status=status.HTTP_200_OK)
+
+
+# GET /api/v1/users/recycler-dashboard/
+class RecyclerDashboardView(generics.GenericAPIView):
+    """
+    NEW Recycler dashboard endpoint that fetches data directly from the database.
+    No Node.js API calls - all data comes from direct ORM queries.
+
+    Returns:
+        - User profile data (from User table - Django managed)
+        - Total kg collected by this recycler (from MarketplaceListing table - Node managed)
+        - Total points accumulated (from Wallet table - Django managed)
+        - Recent 5 system-wide disposer listings (from Listing table - Node managed)
+    """
+    permission_classes = [IsAuthenticated]
+
+    @rate_limit(key_func=user_key('dashboard'), rate=30, per=60)
+    def get(self, request):
+        """
+        Get recycler dashboard data with direct database queries.
+        """
+        from apps.listings.models import Listing
+        from apps.marketplace.models import MarketplaceListing
+        from apps.wallet.models import Wallet
+        from django.db.models import Sum
+
+        user = request.user
+
+        # 1. Get user profile data (Django-managed User table)
+        serializer = UserProfileSerializer(user)
+        user_data = serializer.data
+
+        # 2. Get total kg collected by this recycler (Node-managed MarketplaceListing + Listing tables)
+        # Sum up the quantity from all listings that this recycler has purchased
+        total_kg_collected = MarketplaceListing.objects.filter(
+            recycler_id=user,
+            escrow_status='released'
+        ).aggregate(
+            total_kg=Sum('listing_id__quantity')
+        )['total_kg'] or 0
+
+        # 3. Get total points from wallet (Django-managed Wallet table)
+        try:
+            wallet = Wallet.objects.get(user=user)
+            total_points = wallet.points
+        except Wallet.DoesNotExist:
+            total_points = 0
+            logger.warning(f"No wallet found for user {user.id}")
+
+        # 4. Get recent 5 system-wide disposer listings (Node-managed Listing table)
+        # Show all pending/active listings across the platform
+        recent_posts = Listing.objects.filter(
+            status__in=['pending', 'accepted']
+        ).order_by('-created_at')[:5].values(
+            'id',
+            'title',
+            'waste_type',
+            'quantity',
+            'status',
+            'reward_estimate',
+            'image_url',
+            'pickup_location',
+            'created_at'
+        )
+
+        # Convert UUID to string for JSON serialization
+        recent_posts_list = [
+            {
+                'id': str(post['id']),
+                'title': post['title'],
+                'waste_type': post['waste_type'],
+                'quantity': post['quantity'],
+                'status': post['status'],
+                'reward_estimate': str(post['reward_estimate']),
+                'image_url': post['image_url'],
+                'pickup_location': post['pickup_location'],
+                'created_at': post['created_at'].isoformat()
+            }
+            for post in recent_posts
+        ]
+
+        # 5. Construct response
         dashboard_data = {
-            **user_data,
-            **listing_data
+            'user': user_data,
+            'stats': {
+                'total_kg_collected': float(total_kg_collected),
+                'total_points': total_points,
+                'recent_posts': recent_posts_list
+            }
         }
+
+        logger.info(
+            f"Recycler dashboard accessed by user {user.id}",
+            extra={
+                'user_id': str(user.id),
+                'total_kg_collected': float(total_kg_collected),
+                'total_points': total_points
+            }
+        )
 
         return Response(dashboard_data, status=status.HTTP_200_OK)
 
