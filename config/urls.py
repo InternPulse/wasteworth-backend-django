@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -24,5 +25,7 @@ urlpatterns = [
     path('api/v1/otp/', include('apps.otp.urls')),
     path('api/v1/contact/', include('apps.contact.urls')),
     path('api/v1/payments/', include('apps.payments.urls')),
+    # JWT Token refresh endpoint
+    path('api/v1/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # path('django-rq/', include('django_rq.urls')),  # RQ dashboard disabled for now
 ]
