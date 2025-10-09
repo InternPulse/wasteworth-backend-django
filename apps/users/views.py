@@ -462,6 +462,7 @@ class UpdateUserView(generics.GenericAPIView):
     serializer_class = UserProfileUpdateSerializer
     permission_classes = [IsAuthenticated]
 
+    @rate_limit(key_func=user_key('profile_update'), rate=20, per=3600)  # 20 updates per hour per user
     def patch(self, request):
         user = request.user
         otp_code = request.data.get('otp')

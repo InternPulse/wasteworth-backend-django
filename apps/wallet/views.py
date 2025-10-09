@@ -60,6 +60,7 @@ class WalletBalanceView(generics.GenericAPIView):
     serializer_class = WalletSerializer
     permission_classes = [IsAuthenticated]
 
+    @rate_limit(key_func=user_key('wallet_balance'), rate=100, per=60)  # 100 requests per minute per user
     def get(self, request):
         try:
             # Get or create wallet for authenticated user
@@ -96,6 +97,7 @@ class WalletSummaryView(generics.GenericAPIView):
     serializer_class = WalletSummarySerializer
     permission_classes = [IsAuthenticated]
 
+    @rate_limit(key_func=user_key('wallet_summary'), rate=60, per=60)  # 60 requests per minute per user
     def get(self, request):
         try:
             # Get or create wallet for authenticated user
