@@ -45,7 +45,7 @@ def distribute_activity_reward(user, quantity_kg, transaction_type='activity_rew
 
             # Update wallet points atomically using F() expression
             from django.db.models import F
-            Wallet.objects.filter(id=wallet.id).update(points=F('points') + points)
+            Wallet.objects.filter(wallet_id=wallet.wallet_id).update(points=F('points') + points)
 
             # Refresh wallet to get updated points
             wallet.refresh_from_db()
@@ -104,7 +104,7 @@ def distribute_referral_reward(referrer_user, referee_user, referral_obj=None, i
             )
 
             # Update wallet points atomically using F() expression
-            Wallet.objects.filter(id=wallet.id).update(points=F('points') + points)
+            Wallet.objects.filter(wallet_id=wallet.wallet_id).update(points=F('points') + points)
 
             # Refresh wallet to get updated points
             wallet.refresh_from_db()
