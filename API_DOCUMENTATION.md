@@ -76,13 +76,16 @@ POST /users/forgotPassword/
 POST /users/resetPassword/
 ```
 
-### 3. Update Profile (Sensitive Fields)
+### 3. Update Profile (Role Changes Only)
 ```bash
-# Step 1: Request OTP for email/phone/role changes
-PATCH /users/update-user/ (with sensitive field)
+# Step 1: Request OTP for role changes only
+PATCH /users/update-user/ (with role field)
 
 # Step 2: Verify OTP and complete update
 PATCH /users/update-user/ (with same data + OTP)
+
+# Note: Email and phone can be updated directly without OTP
+PATCH /users/update-user/ (with email/phone - no OTP required)
 ```
 
 ### 4. Referral System
@@ -430,19 +433,21 @@ Returns the same response as Disposer Dashboard (see above).
 }
 ```
 
-#### 8. Update User Profile (Two-Step Process)
+#### 8. Update User Profile
 **PATCH** `/users/update-user/`
 **Authentication Required:** Yes
 
-Updates user profile. **Sensitive fields** (email, phone, role) require OTP verification.
+Updates user profile. **Only role changes** require OTP verification. Email and phone can be updated directly.
 
-**Sensitive Fields:** `email`, `phone`, `role`
-**Non-Sensitive Fields:** `name`, `address_location`
+**OTP-Required Fields:** `role` (only)
+**Direct Update Fields:** `name`, `email`, `phone`, `address_location`
 
-**Step 1 - Update Non-Sensitive Fields (Direct):**
+**Example 1 - Update Email/Phone/Name/Address (Direct - No OTP):**
 ```json
 {
     "name": "Updated Name",
+    "email": "newemail@example.com",
+    "phone": "+9876543210",
     "address_location": {
         "lat": 40.7128,
         "lng": -74.0060
@@ -450,7 +455,7 @@ Updates user profile. **Sensitive fields** (email, phone, role) require OTP veri
 }
 ```
 
-**Step 1 Response (200):**
+**Response (200):**
 ```json
 {
     "success": true,
@@ -458,8 +463,8 @@ Updates user profile. **Sensitive fields** (email, phone, role) require OTP veri
     "data": {
         "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
         "name": "Updated Name",
-        "email": "user@example.com",
-        "phone": "+1234567890",
+        "email": "newemail@example.com",
+        "phone": "+9876543210",
         "role": "disposer",
         "address_location": {
             "lat": 40.7128,
@@ -472,10 +477,12 @@ Updates user profile. **Sensitive fields** (email, phone, role) require OTP veri
 }
 ```
 
-**Step 1 - Update Sensitive Fields (Sends OTP):**
+**Example 2 - Update Role (Requires OTP - Two Steps):**
+
+**Step 1 - Request OTP:**
 ```json
 {
-    "email": "newemail@example.com"
+    "role": "recycler"
 }
 ```
 
@@ -492,7 +499,7 @@ Updates user profile. **Sensitive fields** (email, phone, role) require OTP veri
 **Step 2 - Verify OTP + Complete Update:**
 ```json
 {
-    "email": "newemail@example.com",
+    "role": "recycler",
     "otp": "123456"
 }
 ```
@@ -505,9 +512,9 @@ Updates user profile. **Sensitive fields** (email, phone, role) require OTP veri
     "data": {
         "id": "e4e0dbb2-9384-4278-b84b-e5679f2664e7",
         "name": "John Doe",
-        "email": "newemail@example.com",
+        "email": "user@example.com",
         "phone": "+1234567890",
-        "role": "disposer",
+        "role": "recycler",
         "address_location": null,
         "wallet_balance": "150.00",
         "referral_code": "ABC123DEF",
@@ -515,6 +522,8 @@ Updates user profile. **Sensitive fields** (email, phone, role) require OTP veri
     }
 }
 ```
+
+**Note:** Email and phone updates no longer require OTP verification. Only role changes require OTP for security purposes.
 
 ---
 
@@ -814,7 +823,7 @@ await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/resetPa
 
 ### Profile Update Flow
 ```javascript
-// 1. Update non-sensitive field (direct)
+// 1. Update name, email, phone, or address (direct - no OTP)
 await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-user/', {
     method: 'PATCH',
     headers: {
@@ -822,11 +831,13 @@ await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-
         'Authorization': `Bearer ${accessToken}`
     },
     body: JSON.stringify({
-        name: 'Updated Name'
+        name: 'Updated Name',
+        email: 'newemail@example.com',
+        phone: '+9876543210'
     })
 });
 
-// 2. Update sensitive field (requires OTP)
+// 2. Update role (requires OTP)
 // Step 1: Request OTP
 await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-user/', {
     method: 'PATCH',
@@ -835,7 +846,7 @@ await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-
         'Authorization': `Bearer ${accessToken}`
     },
     body: JSON.stringify({
-        email: 'newemail@example.com'
+        role: 'recycler'
     })
 });
 
@@ -847,7 +858,7 @@ await fetch('https://wasteworth-backend-django.onrender.com/api/v1/users/update-
         'Authorization': `Bearer ${accessToken}`
     },
     body: JSON.stringify({
-        email: 'newemail@example.com',
+        role: 'recycler',
         otp: '123456'
     })
 });
@@ -1568,6 +1579,489 @@ Emails are sent using Django's email backend configured in settings. If email is
 - ✅ Emails fail silently to prevent errors
 - ✅ Data stored in database for admin review
 - ✅ Accessible via Django admin panel
+
+---
+
+## 💳 Payment & Escrow System
+
+### Overview
+The payment system uses **Paystack** for secure payment processing and an **escrow mechanism** to protect both disposers and recyclers. Funds are held in escrow until both parties confirm the transaction.
+
+### Payment Flow States
+
+```
+pending → payment_initiated → locked → item_released → confirmed → released
+```
+
+| State | Description | Who Can Trigger |
+|-------|-------------|-----------------|
+| `pending` | Listing available for purchase | N/A |
+| `payment_initiated` | Recycler started payment | Recycler (Initialize) |
+| `locked` | Payment verified, escrow locked | System (Verify) |
+| `item_released` | Disposer confirmed item handover | Disposer (Confirm Release) |
+| `confirmed` | Recycler confirmed receipt | Recycler (Confirm Receipt) |
+| `released` | Escrow released, rewards distributed | System (Auto) |
+
+---
+
+### 1. Initialize Payment
+
+**POST** `/payments/initialize/`
+**Authentication Required:** Yes (Recycler)
+**Rate Limit:** 10 requests per hour per user
+
+Recycler initiates payment for a listing. This creates a Paystack checkout session.
+
+**Request Body:**
+```json
+{
+    "listing_id": "550e8400-e29b-41d4-a716-446655440000",
+    "amount": "255.00"  // Optional: for verification
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Payment initialized successfully. Redirect user to authorization_url.",
+    "payment_id": "abc-123-def-456",
+    "authorization_url": "https://checkout.paystack.com/xxxxx",
+    "access_code": "xxxxx",
+    "reference": "WW-A1B2C3D4E5F6",
+    "amount": "255.00",
+    "currency": "NGN"
+}
+```
+
+**Frontend Action:**
+Redirect user to `authorization_url` to complete payment on Paystack.
+
+**Error Responses:**
+
+**Own Listing (400):**
+```json
+{
+    "success": false,
+    "message": "You cannot purchase your own listing"
+}
+```
+
+**Listing Not Available (400):**
+```json
+{
+    "success": false,
+    "message": "Listing is not available for purchase (status: completed)"
+}
+```
+
+**Amount Mismatch (400):**
+```json
+{
+    "success": false,
+    "message": "Amount mismatch. Expected: 255.00, Provided: 200.00"
+}
+```
+
+---
+
+### 2. Verify Payment
+
+**GET** `/payments/verify/?reference=WW-xxxxx`
+**Authentication Required:** Yes (Recycler)
+
+After Paystack redirects back, verify the payment was successful.
+
+**Query Parameters:**
+- `reference` (required) - Payment reference from initialize
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Payment verified successfully. Escrow locked. Contact the disposer to collect the item.",
+    "payment": {
+        "payment_id": "abc-123-def-456",
+        "status": "success",
+        "amount": "255.00",
+        "reference": "WW-A1B2C3D4E5F6",
+        "paid_at": "2025-10-09T10:30:00Z",
+        "payment_method": "card"
+    },
+    "marketplace_listing": {
+        "id": "marketplace-listing-uuid",
+        "escrow_status": "locked",
+        "listing_id": "listing-uuid",
+        "disposer": {
+            "name": "John Doe",
+            "phone": "+1234567890",
+            "location": {
+                "lat": 40.7128,
+                "lng": -74.0060
+            }
+        }
+    }
+}
+```
+
+**What Happens:**
+- ✅ Payment verified with Paystack
+- ✅ Escrow locked (funds held securely)
+- ✅ Listing status updated to "accepted"
+- ✅ Disposer contact info provided for collection
+
+**Error Response - Already Verified (200):**
+```json
+{
+    "success": true,
+    "message": "Payment already verified",
+    "payment": {...},
+    "marketplace_listing": {...}
+}
+```
+
+**Error Response - Verification Failed (400):**
+```json
+{
+    "success": false,
+    "message": "Payment verification failed",
+    "error": "Payment was not successful"
+}
+```
+
+---
+
+### 3. Confirm Item Released (Disposer)
+
+**POST** `/payments/confirm-release/`
+**Authentication Required:** Yes (Disposer)
+
+Disposer confirms they have handed over the item to the recycler.
+
+**Request Body:**
+```json
+{
+    "marketplace_listing_id": "marketplace-listing-uuid"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Item release confirmed. The recycler has been notified to confirm receipt.",
+    "marketplace_listing": {
+        "id": "marketplace-listing-uuid",
+        "escrow_status": "item_released",
+        "released_at": "2025-10-09T11:00:00Z"
+    }
+}
+```
+
+**What Happens:**
+- ✅ Marketplace listing status → `item_released`
+- ✅ Listing status → `in-progress`
+- ✅ Recycler notified to confirm receipt
+
+**Error Response - Wrong Status (400):**
+```json
+{
+    "success": false,
+    "message": "Cannot confirm release. Current status: pending"
+}
+```
+
+**Error Response - Not Disposer (403):**
+```json
+{
+    "success": false,
+    "message": "Only the disposer can confirm item release"
+}
+```
+
+---
+
+### 4. Confirm Item Received (Recycler) - Triggers Escrow Release
+
+**POST** `/payments/confirm-receipt/`
+**Authentication Required:** Yes (Recycler)
+
+Recycler confirms they have received the item. **This triggers escrow release and reward distribution.**
+
+**Request Body:**
+```json
+{
+    "marketplace_listing_id": "marketplace-listing-uuid"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Item receipt confirmed! Escrow released, rewards distributed, and payout initiated.",
+    "marketplace_listing": {
+        "id": "marketplace-listing-uuid",
+        "escrow_status": "released",
+        "released_at": "2025-10-09T12:00:00Z"
+    },
+    "rewards": {
+        "disposer_points": 50,
+        "recycler_points": 25,
+        "disposer_referrer_bonus": 100,
+        "recycler_referrer_bonus": 50,
+        "errors": []
+    },
+    "payout": {
+        "payout_id": "payout-uuid",
+        "amount": "255.00",
+        "status": "pending",
+        "error": null
+    }
+}
+```
+
+**What Happens:**
+- ✅ Escrow released (funds no longer held)
+- ✅ Disposer payout initiated to bank account
+- ✅ Points awarded to disposer (50) and recycler (25)
+- ✅ Bonus points to referrers (if applicable)
+- ✅ Listing status → `completed`
+- ✅ Marketplace status → `released`
+
+**Error Response - Wrong Status (400):**
+```json
+{
+    "success": false,
+    "message": "Cannot confirm receipt. Current status: locked"
+}
+```
+
+**Error Response - Not Recycler (403):**
+```json
+{
+    "success": false,
+    "message": "Only the recycler can confirm item receipt"
+}
+```
+
+---
+
+### 5. Paystack Webhook (Internal)
+
+**POST** `/payments/webhook/`
+**Authentication:** Paystack Signature Verification
+**CSRF:** Exempt
+
+Handles Paystack webhook events for payment and payout updates.
+
+**Events Handled:**
+- `charge.success` - Payment completed
+- `transfer.success` - Payout completed
+- `transfer.failed` - Payout failed
+- `transfer.reversed` - Payout reversed
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "Webhook processed successfully"
+}
+```
+
+---
+
+## 💰 Payment Flow Examples
+
+### Complete End-to-End Flow
+
+```javascript
+// ============ STEP 1: RECYCLER INITIALIZES PAYMENT ============
+const initResponse = await fetch('/api/v1/payments/initialize/', {
+    method: 'POST',
+    headers: {
+        'Authorization': `Bearer ${recyclerToken}`,
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        listing_id: 'listing-uuid',
+        amount: '255.00'
+    })
+});
+
+const initData = await initResponse.json();
+// {
+//   authorization_url: "https://checkout.paystack.com/xxxxx",
+//   reference: "WW-A1B2C3D4E5F6"
+// }
+
+// ============ STEP 2: REDIRECT TO PAYSTACK ============
+window.location.href = initData.authorization_url;
+// User completes payment on Paystack, then redirected back
+
+// ============ STEP 3: VERIFY PAYMENT ============
+const verifyResponse = await fetch(`/api/v1/payments/verify/?reference=${initData.reference}`, {
+    headers: {
+        'Authorization': `Bearer ${recyclerToken}`
+    }
+});
+
+const verifyData = await verifyResponse.json();
+// {
+//   success: true,
+//   payment: { status: "success" },
+//   marketplace_listing: { escrow_status: "locked" },
+//   disposer: { name: "John", phone: "+123..." }
+// }
+
+// Escrow is now LOCKED. Show disposer contact info.
+// Recycler contacts disposer to arrange collection.
+
+// ============ STEP 4: DISPOSER CONFIRMS ITEM HANDOVER ============
+const releaseResponse = await fetch('/api/v1/payments/confirm-release/', {
+    method: 'POST',
+    headers: {
+        'Authorization': `Bearer ${disposerToken}`,
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        marketplace_listing_id: verifyData.marketplace_listing.id
+    })
+});
+
+const releaseData = await releaseResponse.json();
+// {
+//   success: true,
+//   marketplace_listing: { escrow_status: "item_released" }
+// }
+
+// ============ STEP 5: RECYCLER CONFIRMS RECEIPT (TRIGGERS RELEASE) ============
+const receiptResponse = await fetch('/api/v1/payments/confirm-receipt/', {
+    method: 'POST',
+    headers: {
+        'Authorization': `Bearer ${recyclerToken}`,
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        marketplace_listing_id: verifyData.marketplace_listing.id
+    })
+});
+
+const receiptData = await receiptResponse.json();
+// {
+//   success: true,
+//   marketplace_listing: { escrow_status: "released" },
+//   rewards: { disposer_points: 50, recycler_points: 25 },
+//   payout: { payout_id: "...", amount: "255.00", status: "pending" }
+// }
+
+// Transaction complete!
+// - Disposer gets payout to bank account
+// - Both parties receive eco-points
+// - Referrers get bonus points
+```
+
+---
+
+### Error Handling
+
+```javascript
+try {
+    const response = await fetch('/api/v1/payments/initialize/', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            listing_id: 'some-uuid',
+            amount: '255.00'
+        })
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+        // Handle specific errors
+        if (data.message.includes('own listing')) {
+            alert('You cannot purchase your own listing');
+        } else if (data.message.includes('not available')) {
+            alert('This listing is no longer available');
+        } else {
+            alert(data.message);
+        }
+        return;
+    }
+
+    // Success - redirect to Paystack
+    window.location.href = data.authorization_url;
+
+} catch (error) {
+    console.error('Payment error:', error);
+    alert('An error occurred. Please try again.');
+}
+```
+
+---
+
+### Testing the Payment Flow
+
+**Prerequisites:**
+- Paystack test API keys configured
+- Test card: `4084084084084081`
+- Test CVV: `408`
+- Test expiry: Any future date
+
+**Test Sequence:**
+```bash
+# 1. Initialize payment (as recycler)
+curl -X POST http://localhost:8000/api/v1/payments/initialize/ \
+  -H "Authorization: Bearer RECYCLER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"listing_id":"listing-uuid","amount":"255.00"}'
+
+# 2. Complete payment on Paystack (use test card above)
+
+# 3. Verify payment
+curl http://localhost:8000/api/v1/payments/verify/?reference=WW-xxxxx \
+  -H "Authorization: Bearer RECYCLER_TOKEN"
+
+# 4. Confirm item release (as disposer)
+curl -X POST http://localhost:8000/api/v1/payments/confirm-release/ \
+  -H "Authorization: Bearer DISPOSER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"marketplace_listing_id":"marketplace-uuid"}'
+
+# 5. Confirm item receipt (as recycler)
+curl -X POST http://localhost:8000/api/v1/payments/confirm-receipt/ \
+  -H "Authorization: Bearer RECYCLER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"marketplace_listing_id":"marketplace-uuid"}'
+```
+
+---
+
+### Payment Security Features
+
+✅ **Escrow Protection**
+- Funds held securely until both parties confirm
+- Automatic dispute resolution after timeout
+- Refund capability for failed transactions
+
+✅ **Paystack Integration**
+- PCI-DSS compliant payment processing
+- Webhook signature verification
+- Automatic reconciliation
+
+✅ **Fraud Prevention**
+- Users cannot purchase own listings
+- Amount verification before processing
+- Transaction status validation
+
+✅ **Audit Trail**
+- All state changes timestamped
+- Payment provider responses logged
+- Webhook events recorded
 
 ---
 
