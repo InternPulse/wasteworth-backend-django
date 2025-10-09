@@ -162,6 +162,7 @@ INSTALLED_APPS = [
     'apps.referral',       # Added referral app
     'apps.marketplace',    # Added marketplace app
     'apps.contact',        # Added contact app
+    'apps.payments',       # Added payments app for Paystack integration
     "cloudinary",
     "cloudinary_storage",
 ]
@@ -219,6 +220,9 @@ if USE_POSTGRES:
             'OPTIONS': {
                 'sslmode': config('SSL_MODE', default='disable'),
             } if config('SSL_MODE', default='disable') != 'disable' else {},
+            # Connection pooling to prevent intermittent connection failures
+            'CONN_MAX_AGE': 600,  # Keep connections alive for 10 minutes
+            'CONN_HEALTH_CHECKS': True,  # Check connection health before using
         }
     }
 else:
@@ -428,6 +432,8 @@ AXES_RESET_ON_SUCCESS = True  # Reset counter on successful login
 AXES_VERBOSE = True  # Log axes events
 AXES_LOCKOUT_MESSAGE = 'Too many failed login attempts. Your account has been temporarily locked for security. Please try again in 30 minutes.'
 
+# Note: AXES_LOCKOUT_PARAMETERS already handles username + IP tracking (line 424)
+
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
@@ -465,3 +471,22 @@ INTERNAL_API_KEY = config('INTERNAL_API_KEY', default='')
 # In production, set FRONTEND_URL env variable to your actual domain
 _default_frontend = f"http://{ALLOWED_HOSTS[0]}" if DEBUG else f"https://{ALLOWED_HOSTS[0]}"
 FRONTEND_URL = config('FRONTEND_URL', default=_default_frontend)
+
+# ------------------------------
+# Paystack Configuration
+# ------------------------------
+PAYSTACK_SECRET_KEY = config('PAYSTACK_SECRET_KEY', default='')
+PAYSTACK_PUBLIC_KEY = config('PAYSTACK_PUBLIC_KEY', default='')
+PAYSTACK_CALLBACK_URL = config('PAYSTACK_CALLBACK_URL', default=f'{FRONTEND_URL}/payment/callback')
+PAYSTACK_WEBHOOK_SECRET = config('PAYSTACK_WEBHOOK_SECRET', default='')
+
+# Paystack API endpoints
+PAYSTACK_BASE_URL = 'https://api.paystack.co'
+PAYSTACK_INITIALIZE_URL = f'{PAYSTACK_BASE_URL}/transaction/initialize'
+PAYSTACK_VERIFY_URL = f'{PAYSTACK_BASE_URL}/transaction/verify'
+PAYSTACK_TRANSFER_URL = f'{PAYSTACK_BASE_URL}/transfer'
+PAYSTACK_TRANSFER_RECIPIENT_URL = f'{PAYSTACK_BASE_URL}/transferrecipient'
+
+# Platform fee (percentage)
+from decimal import Decimal
+PLATFORM_FEE_PERCENTAGE = Decimal('5.0')  # 5% platform fee
