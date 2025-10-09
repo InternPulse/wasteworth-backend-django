@@ -230,5 +230,6 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
     @staticmethod
     def requires_otp(data):
         """Check if the update contains sensitive fields that require OTP"""
-        sensitive_fields = {'email', 'phone', 'role'}
+        # Only role changes require OTP now - email and phone can be updated directly
+        sensitive_fields = {'role'}
         return bool(sensitive_fields.intersection(data.keys()))
