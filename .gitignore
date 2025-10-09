@@ -85,3 +85,21 @@ yarn-error.log*
 # Docker
 .dockerignore
 docker-compose.override.yml
+# Test scripts and reports
+test_*.py
+test_*.json
+E2E_*.json
+comeplete_*.py
+e2e_*.py
+complete_*.py
+check_*.py
+*_e2e_*.py
+diagnose_*.py
+audit_*.py
+verify_*.py
+
+# Documentation files (except README.md and API_DOCUMENTATION.md)
+*.md
+!README.md
+!API_DOCUMENTATION.md
+!docs/**/*.md
