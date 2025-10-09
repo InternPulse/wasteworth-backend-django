@@ -23,5 +23,6 @@ urlpatterns = [
     path('api/v1/users/', include('apps.users.urls')),
     path('api/v1/otp/', include('apps.otp.urls')),
     path('api/v1/contact/', include('apps.contact.urls')),
+    path('api/v1/payments/', include('apps.payments.urls')),
     # path('django-rq/', include('django_rq.urls')),  # RQ dashboard disabled for now
 ]
