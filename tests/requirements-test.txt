@@ -1,0 +1,53 @@
+# Testing Requirements for Wasteworth E2E Tests
+# ================================================
+# Install with: pip install -r requirements-test.txt
+
+# Core Testing Frameworks
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+pytest-timeout>=2.1.0
+pytest-xdist>=3.3.1  # For parallel test execution
+
+# HTTP & API Testing
+requests>=2.31.0
+responses>=0.23.0  # For mocking HTTP responses
+httpx>=0.24.0  # Alternative async HTTP client
+
+# Test Data Generation
+faker>=19.2.0
+factory-boy>=3.2.1  # For creating test objects
+
+# Configuration
+python-decouple>=3.8
+
+# Database Testing
+pytest-django>=4.5.2  # If running Django integration tests
+psycopg2-binary>=2.9.6  # PostgreSQL adapter
+
+# Async Testing
+asyncio>=3.4.3
+
+# Utilities
+python-dateutil>=2.8.2
+pytz>=2023.3
+
+# Reporting
+pytest-html>=3.2.0  # HTML test reports
+pytest-json-report>=1.5.0  # JSON test reports
+allure-pytest>=2.13.2  # Allure reporting
+
+# Code Quality (Optional)
+pytest-flake8>=1.1.1
+pytest-black>=0.3.12
+pytest-mypy>=0.10.3
+
+# Performance Testing (Optional)
+locust>=2.15.1  # For load testing
+
+# Mocking & Stubbing
+pytest-mock>=3.11.1
+responses>=0.23.0
+
+# Environment
+python-dotenv>=1.0.0

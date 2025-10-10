@@ -1,31 +1,29 @@
 """
 URL configuration for config project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
+from apps.core.views import health_check, api_root
 
 urlpatterns = [
+    # Health check endpoint (for monitoring services like Render)
+    path('', health_check, name='health_check'),
+    path('health/', health_check, name='health_check_alias'),
+
+    # API root
+    path('api/v1/', api_root, name='api_root'),
+
+    # Admin
     path('admin/', admin.site.urls),
+
+    # API endpoints
     path('api/v1/wallet/', include('apps.wallet.urls')),
     path('api/v1/users/', include('apps.users.urls')),
     path('api/v1/otp/', include('apps.otp.urls')),
     path('api/v1/contact/', include('apps.contact.urls')),
     path('api/v1/payments/', include('apps.payments.urls')),
+
     # JWT Token refresh endpoint
     path('api/v1/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    # path('django-rq/', include('django_rq.urls')),  # RQ dashboard disabled for now
 ]
