@@ -1,4 +1,4 @@
-https://github.com/InternPulse/wasteworth-backend-django/blob/main/Screenshot%202025-10-11%20132329.png
+![Screenshot](https://github.com/InternPulse/wasteworth-backend-django/blob/main/Screenshot%202025-10-11%20132329.png?raw=true)
 # WasteWorth Django Backend API
 
 ## Project Overview
