@@ -56,9 +56,11 @@ class UserSignupSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password')
         referred_by_code = validated_data.get('referred_by')
 
-        user = User.objects.create(**validated_data)
-        user.set_password(password)
-        user.save()
+        user = User.objects.create_user(
+            email=validated_data['email'],
+            password=password,
+            **{k: v for k, v in validated_data.items() if k != 'email'}
+        )
 
         # Handle referral reward if user signed up with a referral code
         if referred_by_code:
@@ -108,7 +110,7 @@ class UserLoginSerializer(serializers.Serializer):
         # Note: authenticate() expects 'username' parameter even though we're using email
         user = authenticate(
             request=self.context.get('request'),
-            username=email,
+            email=email,
             password=password
         )
 
