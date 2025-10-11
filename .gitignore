@@ -104,8 +104,11 @@ diagnose_*.py
 audit_*.py
 verify_*.py
 
+# Documentation and test folders
+docs/
+tests/
+
 # Documentation files (except README.md and API_DOCUMENTATION.md)
 *.md
 !README.md
 !API_DOCUMENTATION.md
-!docs/**/*.md
