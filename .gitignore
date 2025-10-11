@@ -1,5 +1,6 @@
 venv
 .env
+.env.dev
 .env.prod
 __pycache__/
 *.pyc
@@ -85,10 +86,15 @@ yarn-error.log*
 # Docker
 .dockerignore
 docker-compose.override.yml
+
 # Test scripts and reports
 test_*.py
 test_*.json
-E2E_*.json
+*E2E*.json
+PRODUCTION_E2E*.json
+COMPLETE_E2E*.json
+FINAL_COMPLETE*.json
+FULL_MARKETPLACE*.json
 comeplete_*.py
 e2e_*.py
 complete_*.py
