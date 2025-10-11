@@ -36,35 +36,26 @@ ALLOWED_HOSTS = ['*']
 # DATABASE CONFIGURATION
 # ===================================================================
 
-# Auto-detect: Use PostgreSQL if DATABASE_HOST is set, otherwise SQLite
-DATABASE_HOST = config('DATABASE_HOST', default='')
+# Use SQLite for local development (no external dependencies needed)
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
 
-if DATABASE_HOST:
-    # Use PostgreSQL (for deployed development environment like Render)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
-            'USER': config('DATABASE_USER', default='postgres'),
-            'PASSWORD': config('DATABASE_PASSWORD', default='postgres'),
-            'HOST': DATABASE_HOST,
-            'PORT': config('DATABASE_PORT', default='5432'),
-            'OPTIONS': {
-                'sslmode': config('SSL_MODE', default='require'),
-            },
-            # Connection pooling for deployed development
-            'CONN_MAX_AGE': 600,
-            'CONN_HEALTH_CHECKS': True,
-        }
-    }
-else:
-    # Use SQLite for local development (no external dependencies needed)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+# Optional: Uncomment to use PostgreSQL locally
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
+#         'USER': config('DATABASE_USER', default='postgres'),
+#         'PASSWORD': config('DATABASE_PASSWORD', default='postgres'),
+#         'HOST': config('DATABASE_HOST', default='localhost'),
+#         'PORT': config('DATABASE_PORT', default='5432'),
+#         'CONN_MAX_AGE': 0,  # Don't reuse connections in dev for easier debugging
+#     }
+# }
 
 
 # ===================================================================
