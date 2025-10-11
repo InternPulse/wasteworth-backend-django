@@ -1,3 +1,4 @@
+https://github.com/InternPulse/wasteworth-backend-django/blob/main/Screenshot%202025-10-11%20132329.png
 # WasteWorth Django Backend API
 
 ## Project Overview
