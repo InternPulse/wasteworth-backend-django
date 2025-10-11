@@ -1,5 +1,5 @@
-from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.db import models
 import uuid
 import string
 
@@ -113,3 +113,6 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.name} ({self.email})"
+
+
+

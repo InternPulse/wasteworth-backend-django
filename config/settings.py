@@ -29,7 +29,7 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-fallback-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 # ALLOWED_HOSTS = ["*"]
@@ -150,6 +150,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',
     'apps.users',
     'apps.listings',
     'apps.wallet',
@@ -164,6 +168,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -372,6 +377,22 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@wasteworth.c
 
 # Email timeout settings (2 minutes for SMTP operations)
 EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=120, cast=int)
+
+# Internationalization
+# https://docs.djangoproject.com/en/5.2/topics/i18n/
+
+LANGUAGE_CODE = 'en-us'
+
+TIME_ZONE = 'UTC'
+
+USE_I18N = True
+
+USE_TZ = True
+
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.2/howto/static-files/
+
+STATIC_URL = 'static/'
 
 # Redis Queue Configuration - Temporarily commented out
 RQ_QUEUES = {
