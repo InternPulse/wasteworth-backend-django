@@ -100,18 +100,19 @@ if CORS_ORIGINS_ENV:
 # ===================================================================
 
 # Print emails to console instead of sending them
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'dev@wasteworth.local'
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# DEFAULT_FROM_EMAIL = 'dev@wasteworth.local'
 
 # If you want to test real email sending in development, uncomment:
-# EMAIL_BACKEND = 'utils.email_backend.SMTPBackendWithTimeout'
-# EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
-# EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-# EMAIL_USE_TLS = True
-# EMAIL_USE_SSL = False
-# EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-# EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-# EMAIL_TIMEOUT = 120
+EMAIL_BACKEND = 'utils.email_backend.SMTPBackendWithTimeout'
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_TIMEOUT = 120
+DEFAULT_FROM_EMAIL = 'abdullatifsadiq21@gmail.com'
 
 
 # ===================================================================
