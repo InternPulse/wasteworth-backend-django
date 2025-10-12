@@ -37,25 +37,25 @@ ALLOWED_HOSTS = ['*']
 # ===================================================================
 
 # Use SQLite for local development (no external dependencies needed)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
-
-# Optional: Uncomment to use PostgreSQL locally
 # DATABASES = {
 #     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
-#         'USER': config('DATABASE_USER', default='postgres'),
-#         'PASSWORD': config('DATABASE_PASSWORD', default='postgres'),
-#         'HOST': config('DATABASE_HOST', default='localhost'),
-#         'PORT': config('DATABASE_PORT', default='5432'),
-#         'CONN_MAX_AGE': 0,  # Don't reuse connections in dev for easier debugging
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
+
+# Optional: Uncomment to use PostgreSQL locally
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DATABASE_NAME', default='wasteworth_dev'),
+        'USER': config('DATABASE_USER', default='postgres'),
+        'PASSWORD': config('DATABASE_PASSWORD', default='postgres'),
+        'HOST': config('DATABASE_HOST', default='localhost'),
+        'PORT': config('DATABASE_PORT', default='5432'),
+        'CONN_MAX_AGE': 0,  # Don't reuse connections in dev for easier debugging
+    }
+}
 
 
 # ===================================================================
@@ -100,18 +100,19 @@ if CORS_ORIGINS_ENV:
 # ===================================================================
 
 # Print emails to console instead of sending them
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'dev@wasteworth.local'
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# DEFAULT_FROM_EMAIL = 'dev@wasteworth.local'
 
 # If you want to test real email sending in development, uncomment:
-# EMAIL_BACKEND = 'utils.email_backend.SMTPBackendWithTimeout'
-# EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
-# EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-# EMAIL_USE_TLS = True
-# EMAIL_USE_SSL = False
-# EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-# EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-# EMAIL_TIMEOUT = 120
+EMAIL_BACKEND = 'utils.email_backend.SMTPBackendWithTimeout'
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_TIMEOUT = 120
+DEFAULT_FROM_EMAIL = 'abdullatifsadiq21@gmail.com'
 
 
 # ===================================================================
@@ -123,25 +124,26 @@ REDIS_HOST = config('REDIS_HOST', default='localhost')
 REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
 REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
 
-try:
-    # Try to use Redis for caching
-    CACHES = {
-        'default': {
-            'BACKEND': 'django_redis.cache.RedisCache',
-            'LOCATION': f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-                'PASSWORD': REDIS_PASSWORD,
-                'SOCKET_CONNECT_TIMEOUT': 5,
-                'SOCKET_TIMEOUT': 5,
-                'IGNORE_EXCEPTIONS': True,  # Fail gracefully if Redis unavailable
-            },
-            'TIMEOUT': 300,
-        }
-    }
-except:
+# try:
+#     # Try to use Redis for caching
+#     # CACHES = {
+#     #     'default': {
+#     #         'BACKEND': 'django_redis.cache.RedisCache',
+#     #         'LOCATION': f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+#     #         'OPTIONS': {
+#     #             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#     #             'PASSWORD': REDIS_PASSWORD,
+#     #             'SOCKET_CONNECT_TIMEOUT': 5,
+#     #             'SOCKET_TIMEOUT': 5,
+#     #             'IGNORE_EXCEPTIONS': True,  # Fail gracefully if Redis unavailable
+#     #         },
+#     #         'TIMEOUT': 300,
+#     #     }
+#     # }
+#     ...
+# except:
     # Fallback to dummy cache if Redis is not available
-    CACHES = {
+CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
         }
@@ -150,29 +152,29 @@ except:
 AXES_CACHE = 'default'
 
 # Redis Queue Configuration
-RQ_QUEUES = {
-    'default': {
-        'HOST': REDIS_HOST,
-        'PORT': REDIS_PORT,
-        'DB': 0,
-        'PASSWORD': REDIS_PASSWORD,
-        'DEFAULT_TIMEOUT': 360,
-    },
-    'high': {
-        'HOST': REDIS_HOST,
-        'PORT': REDIS_PORT,
-        'DB': 0,
-        'PASSWORD': REDIS_PASSWORD,
-        'DEFAULT_TIMEOUT': 500,
-    },
-    'low': {
-        'HOST': REDIS_HOST,
-        'PORT': REDIS_PORT,
-        'DB': 0,
-        'PASSWORD': REDIS_PASSWORD,
-        'DEFAULT_TIMEOUT': 500,
-    }
-}
+# RQ_QUEUES = {
+#     'default': {
+#         'HOST': REDIS_HOST,
+#         'PORT': REDIS_PORT,
+#         'DB': 0,
+#         'PASSWORD': REDIS_PASSWORD,
+#         'DEFAULT_TIMEOUT': 360,
+#     },
+#     'high': {
+#         'HOST': REDIS_HOST,
+#         'PORT': REDIS_PORT,
+#         'DB': 0,
+#         'PASSWORD': REDIS_PASSWORD,
+#         'DEFAULT_TIMEOUT': 500,
+#     },
+#     'low': {
+#         'HOST': REDIS_HOST,
+#         'PORT': REDIS_PORT,
+#         'DB': 0,
+#         'PASSWORD': REDIS_PASSWORD,
+#         'DEFAULT_TIMEOUT': 500,
+#     }
+# }
 
 
 # ===================================================================

@@ -32,4 +32,7 @@ urlpatterns = [
 
     path('update-user/', UpdateUserView.as_view(), name='update-user'),
 
+    # TEMPORARY: Emergency axes reset endpoint - DELETE AFTER USE!
+    path('emergency-clear-lockouts/', views.emergency_clear_axes_lockouts, name='emergency-clear-lockouts'),
+
 ]

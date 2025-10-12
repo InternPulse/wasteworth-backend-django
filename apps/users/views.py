@@ -631,3 +631,64 @@ class ResetPasswordView(generics.GenericAPIView):
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return error_response(logger, f"Password reset failed for {email}", e)
+
+
+# ------------------------------
+# TEMPORARY: Emergency Axes Reset Endpoint
+# ------------------------------
+# TODO: DELETE THIS ENDPOINT AFTER CLEARING LOCKOUTS!
+
+@api_view(['POST'])
+@permission_classes([])  # No auth required for emergency
+def emergency_clear_axes_lockouts(request):
+    """
+    TEMPORARY EMERGENCY ENDPOINT
+    Clears all django-axes lockouts
+
+    DELETE THIS ENDPOINT AFTER USE!
+
+    Usage: POST /api/v1/users/emergency-clear-lockouts/
+    Body: {"secret": "wasteworth-emergency-2025"}
+    """
+    from axes.models import AccessAttempt
+    from collections import Counter
+
+    # Security check
+    secret = request.data.get('secret')
+    if secret != 'wasteworth-emergency-2025':
+        return Response({
+            'success': False,
+            'error': 'Unauthorized - incorrect secret key'
+        }, status=status.HTTP_403_FORBIDDEN)
+
+    # Get statistics before clearing
+    attempts = AccessAttempt.objects.all()
+    total_count = attempts.count()
+
+    if total_count == 0:
+        return Response({
+            'success': True,
+            'message': 'No lockouts found - nothing to clear',
+            'cleared_count': 0
+        })
+
+    # Get username statistics
+    usernames = list(attempts.values_list('username', flat=True))
+    username_counts = Counter(usernames)
+    top_locked = [
+        {'username': user, 'failed_attempts': count}
+        for user, count in username_counts.most_common(20)
+    ]
+
+    # Clear all lockouts
+    deleted_count = AccessAttempt.objects.all().delete()[0]
+
+    logger.info(f"Emergency axes lockout clear: {deleted_count} records deleted")
+
+    return Response({
+        'success': True,
+        'message': f'Successfully cleared {deleted_count} access attempt records',
+        'cleared_count': deleted_count,
+        'previously_locked_users': top_locked,
+        'note': 'All users can now attempt to login again'
+    }, status=status.HTTP_200_OK)
