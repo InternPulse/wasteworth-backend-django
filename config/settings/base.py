@@ -22,7 +22,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 # ===================================================================
 
 INSTALLED_APPS = [
-    'axes',
+    # 'axes',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -87,7 +87,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 AUTH_USER_MODEL = 'users.User'
 
 AUTHENTICATION_BACKENDS = [
-    'axes.backends.AxesStandaloneBackend',
+    # 'axes.backends.AxesStandaloneBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
 
@@ -108,18 +108,18 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Django-axes Configuration (Brute-force Protection)
-AXES_FAILURE_LIMIT = 5  # Lock after 5 failed attempts
-AXES_COOLOFF_TIME = timedelta(minutes=30)  # 30-minute lockout
-AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']  # Track by username + IP
-AXES_USERNAME_FORM_FIELD = 'email'  # Our login form uses email field
-AXES_ENABLE_ADMIN = True  # Enable admin interface
-AXES_ONLY_ALLOW_FAILURES_ON_POST = True  # Only count POST requests
-AXES_RESET_ON_SUCCESS = True  # Reset counter on successful login
-AXES_VERBOSE = True  # Log axes events
-AXES_LOCKOUT_MESSAGE = (
-    'Too many failed login attempts. Your account has been temporarily locked '
-    'for security. Please try again in 30 minutes.'
-)
+# AXES_FAILURE_LIMIT = 5  # Lock after 5 failed attempts
+# AXES_COOLOFF_TIME = timedelta(minutes=30)  # 30-minute lockout
+# AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']  # Track by username + IP
+# AXES_USERNAME_FORM_FIELD = 'email'  # Our login form uses email field
+# AXES_ENABLE_ADMIN = True  # Enable admin interface
+# AXES_ONLY_ALLOW_FAILURES_ON_POST = True  # Only count POST requests
+# AXES_RESET_ON_SUCCESS = True  # Reset counter on successful login
+# AXES_VERBOSE = True  # Log axes events
+# AXES_LOCKOUT_MESSAGE = (
+#     'Too many failed login attempts. Your account has been temporarily locked '
+#     'for security. Please try again in 30 minutes.'
+# )
 
 # Cookie Security (base configuration)
 SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookies

@@ -225,21 +225,21 @@ if USE_POSTGRES:
             'CONN_HEALTH_CHECKS': True,  # Check connection health before using
         }
     }
-else:
+# else:
     # Use SQLite for local development
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+    # DATABASES = {
+    #     'default': {
+    #         'ENGINE': 'django.db.backends.sqlite3',
+    #         'NAME': BASE_DIR / 'db.sqlite3',
+    #     }
+    # }
 
 # Use SQLite for testing
-if 'test' in sys.argv:
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:'
-    }
+# if 'test' in sys.argv:
+#     DATABASES['default'] = {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': ':memory:'
+#     }
 
 
 # Password validation
@@ -287,8 +287,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
 AUTHENTICATION_BACKENDS = [
-    'axes.backends.AxesBackend',  # Changed from AxesStandaloneBackend for better DRF integration
+    # 'axes.backends.AxesBackend',  # Changed from AxesStandaloneBackend for better DRF integration
+    'django.contrib.auth.backends.ModelBackend'
 ]
+
 
 # REST Framework Configuration
 REST_FRAMEWORK = {
