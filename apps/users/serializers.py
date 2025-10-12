@@ -107,10 +107,11 @@ class UserLoginSerializer(serializers.Serializer):
             raise serializers.ValidationError({'password': ["Password is required."]})
 
         # Use Django's authenticate() to enable django-axes tracking
-        # Note: authenticate() expects 'username' parameter even though we're using email
+        # IMPORTANT: authenticate() expects 'username' parameter, NOT 'email'
+        # Even though USERNAME_FIELD='email', the authenticate() function uses 'username' as the kwarg
         user = authenticate(
             request=self.context.get('request'),
-            email=email,
+            username=email,
             password=password
         )
 
