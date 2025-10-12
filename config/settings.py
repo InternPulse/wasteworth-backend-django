@@ -174,7 +174,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'axes.middleware.AxesMiddleware',
+    # 'axes.middleware.AxesMiddleware',
     'utils.logging.RequestResponseLoggingMiddleware',  # Request/Response logging
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -287,8 +287,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
 AUTHENTICATION_BACKENDS = [
-    'axes.backends.AxesStandaloneBackend',
-    'django.contrib.auth.backends.ModelBackend',
+    'axes.backends.AxesBackend',  # Changed from AxesStandaloneBackend for better DRF integration
 ]
 
 # REST Framework Configuration
